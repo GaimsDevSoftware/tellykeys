@@ -10,7 +10,7 @@ It is built for the “it should just work” desktop experience: discover the T
 pair once, then use the large remote controls without thinking about protocols,
 ADB, or terminal commands.
 
-![TellyKeys icon](assets/tellykeys.svg)
+![TellyKeys main remote](assets/screenshots/tellykeys-main.png)
 
 ## Download
 
@@ -18,7 +18,7 @@ Packages will be attached to GitHub Releases as they are built:
 
 | Platform | Package | Status |
 | --- | --- | --- |
-| Linux Mint / Ubuntu | [`tellykeys_0.1.0_all.deb`](https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/tellykeys_0.1.0_all.deb) | Available after the first release upload |
+| Linux Mint / Ubuntu | [`tellykeys_0.1.0_all.deb`](https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/tellykeys_0.1.0_all.deb) | Available |
 | Fedora / RPM distros | [`tellykeys-0.1.0-1.noarch.rpm`](https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/tellykeys-0.1.0-1.noarch.rpm) | Coming soon |
 | Cross-distro Linux | [`org.gaimsdevsoftware.TellyKeys.flatpak`](https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/org.gaimsdevsoftware.TellyKeys.flatpak) | Coming soon |
 

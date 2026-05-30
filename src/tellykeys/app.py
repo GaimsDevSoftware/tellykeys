@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import threading
 import warnings
 from concurrent.futures import Future
@@ -401,6 +402,8 @@ class TellyKeysWindow(Gtk.Window):
         self.connect("destroy", self.on_destroy)
         self.connect("key-press-event", self.on_key_press)
         self.connect("size-allocate", self.on_size_allocate)
+        demo_mode = os.environ.get("TELLYKEYS_DEMO") == "1"
+
         self.show_all()
         self.code_row.hide()
         self.remote_panel.hide()
@@ -408,7 +411,10 @@ class TellyKeysWindow(Gtk.Window):
             self.setup_tray()
         if start_hidden and self.use_tray:
             self.hide()
-        GLib.timeout_add(350, self.start_auto_setup)
+        if demo_mode:
+            self.show_demo_state()
+        else:
+            GLib.timeout_add(350, self.start_auto_setup)
         GLib.timeout_add_seconds(3, self.refresh_bluetooth_text_status)
         self.schedule_window_fit()
 
@@ -592,7 +598,7 @@ class TellyKeysWindow(Gtk.Window):
         self.runner.loop.run_forever()
 
     def on_size_allocate(self, _widget: Gtk.Widget, allocation: Gdk.Rectangle) -> None:
-        compact = allocation.width < 390 or allocation.height < 680
+        compact = allocation.width < 390 or allocation.height < 820
         if compact == self.compact_mode:
             return
         self.compact_mode = compact
@@ -1660,16 +1666,29 @@ class TellyKeysWindow(Gtk.Window):
         self.set_status("\n".join(lines))
         self.schedule_window_fit()
 
+    def show_demo_state(self) -> bool:
+        self.connected = True
+        self.primary_button.hide()
+        self.remote_panel.set_no_show_all(False)
+        self.remote_panel.show_all()
+        self.set_status("Ready\nLiving Room Google TV\nTV is on\nApp: YouTube")
+        self.schedule_window_fit()
+        return False
+
     def friendly_app_name(self, app_id: str) -> str:
+        app_id = app_id.strip()
         names = {
             "com.google.android.youtube.tv": "YouTube",
             "com.netflix.ninja": "Netflix",
             "com.amazon.amazonvideo.livingroom": "Prime Video",
             "com.disney.disneyplus": "Disney+",
             "org.xbmc.kodi": "Kodi",
+            "com.google.android.apps.tv.dreamx": "Google TV",
             "com.google.android.apps.tv.launcherx": "Google TV",
             "com.google.android.tvlauncher": "Google TV",
         }
+        if app_id.startswith("com.google.android.apps.tv.dreamx"):
+            return "Google TV"
         return names.get(app_id, app_id)
 
     def set_status(self, text: str) -> None:

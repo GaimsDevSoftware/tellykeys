@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+OUT_DIR="$ROOT/assets/screenshots"
+OUT_FILE="${1:-$OUT_DIR/tellykeys-main.png}"
+mkdir -p "$(dirname "$OUT_FILE")"
+
+export DISPLAY="${DISPLAY:-:0}"
+
+TELLYKEYS_DEMO=1 "$ROOT/.venv/bin/tellykeys" &
+APP_PID=$!
+
+cleanup() {
+  if kill -0 "$APP_PID" >/dev/null 2>&1; then
+    kill "$APP_PID" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+WINDOW_ID=""
+for _ in $(seq 1 80); do
+  WINDOW_ID="$(xdotool search --onlyvisible --all --pid "$APP_PID" --name '^TellyKeys$' 2>/dev/null | tail -n 1 || true)"
+  if [[ -n "$WINDOW_ID" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+
+if [[ -z "$WINDOW_ID" ]]; then
+  echo "Could not find the TellyKeys window." >&2
+  exit 1
+fi
+
+xdotool windowactivate "$WINDOW_ID" >/dev/null 2>&1 || true
+sleep 1
+
+import -window "$WINDOW_ID" "$OUT_FILE"
+echo "$OUT_FILE"
