@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VERSION="$(python3 - "$ROOT/pyproject.toml" <<'PY'
+import re
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+print(re.search(r'^version = "([^"]+)"', text, re.M).group(1))
+PY
+)"
+PYVER="$(python3 - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)"
+SITE="$ROOT/.venv/lib/python${PYVER}/site-packages"
+RPMROOT="$ROOT/build/rpm"
+PAYLOAD="$ROOT/build/tellykeys-rpm-payload"
+OUT="$ROOT/dist"
+
+command -v rpmbuild >/dev/null 2>&1 || {
+  echo "rpmbuild is not installed. On Fedora: sudo dnf install rpm-build" >&2
+  exit 1
+}
+
+if [[ ! -d "$SITE/androidtvremote2" || ! -d "$SITE/aiofiles" ]]; then
+  echo "Missing bundled Python dependencies in .venv. Run: python -m pip install -e ." >&2
+  exit 1
+fi
+
+rm -rf "$RPMROOT" "$PAYLOAD"
+mkdir -p "$RPMROOT/BUILD" "$RPMROOT/RPMS" "$RPMROOT/SOURCES" "$RPMROOT/SPECS" "$RPMROOT/SRPMS"
+mkdir -p "$PAYLOAD/opt/tellykeys/lib" "$PAYLOAD/opt/tellykeys/scripts" "$PAYLOAD/usr/bin" "$PAYLOAD/usr/share/applications" "$PAYLOAD/usr/share/icons/hicolor/scalable/apps" "$PAYLOAD/usr/share/doc/tellykeys"
+
+cp -a "$ROOT/src/tellykeys" "$PAYLOAD/opt/tellykeys/lib/"
+cp -a "$SITE/androidtvremote2" "$PAYLOAD/opt/tellykeys/lib/"
+cp -a "$SITE/aiofiles" "$PAYLOAD/opt/tellykeys/lib/"
+cp -a "$ROOT/scripts/tellykeys-bluetooth-keyboard-helper" "$ROOT/scripts/tellykeys-bluetooth-system-fix" "$ROOT/scripts/tellykeys-bluetooth-system-unfix" "$PAYLOAD/opt/tellykeys/scripts/"
+cp "$ROOT/packaging/linux/tellykeys.desktop" "$PAYLOAD/usr/share/applications/"
+cp "$ROOT/packaging/linux/tellykeys-tray.desktop" "$PAYLOAD/usr/share/applications/"
+cp "$ROOT/assets/tellykeys.svg" "$PAYLOAD/usr/share/icons/hicolor/scalable/apps/tellykeys.svg"
+cp "$ROOT/README.md" "$PAYLOAD/usr/share/doc/tellykeys/README.md"
+
+cat > "$PAYLOAD/usr/bin/tellykeys" <<'EOF'
+#!/usr/bin/env bash
+export PYTHONPATH="/opt/tellykeys/lib${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m tellykeys.app "$@"
+EOF
+chmod 0755 "$PAYLOAD/usr/bin/tellykeys"
+chmod 0755 "$PAYLOAD/opt/tellykeys/scripts/"*
+
+tar -C "$PAYLOAD" -czf "$RPMROOT/SOURCES/tellykeys-${VERSION}.tar.gz" .
+
+cat > "$RPMROOT/SPECS/tellykeys.spec" <<EOF
+Name: tellykeys
+Version: $VERSION
+Release: 1%{?dist}
+Summary: Google TV and Android TV remote for Linux
+License: MIT
+BuildArch: noarch
+Source0: tellykeys-%{version}.tar.gz
+Requires: python3 >= 3.11
+Requires: python3-gobject
+Requires: gtk3
+Requires: avahi-tools
+Requires: python3-cryptography
+Requires: python3-protobuf
+Requires: pipewire-utils
+Recommends: android-tools
+Recommends: bluez
+Recommends: polkit
+
+%description
+TellyKeys is a GTK desktop remote for Google TV and Android TV with pairing,
+D-pad controls, app shortcuts, text input, optional Bluetooth keyboard mode,
+and experimental voice search.
+
+%prep
+%setup -q -c
+
+%build
+
+%install
+mkdir -p %{buildroot}
+cp -a . %{buildroot}/
+
+%files
+/usr/bin/tellykeys
+/usr/share/applications/tellykeys.desktop
+/usr/share/applications/tellykeys-tray.desktop
+/usr/share/icons/hicolor/scalable/apps/tellykeys.svg
+/usr/share/doc/tellykeys/README.md
+/opt/tellykeys
+EOF
+
+rpmbuild --define "_topdir $RPMROOT" -bb "$RPMROOT/SPECS/tellykeys.spec"
+mkdir -p "$OUT"
+cp "$RPMROOT/RPMS/noarch/tellykeys-${VERSION}-1"*.noarch.rpm "$OUT/"
+ls -1 "$OUT"/tellykeys-"$VERSION"-*.noarch.rpm

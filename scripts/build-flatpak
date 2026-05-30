@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MANIFEST="$ROOT/packaging/flatpak/org.gaimsdevsoftware.TellyKeys.yml"
+OUT="$ROOT/dist"
+REPO="$ROOT/build/flatpak-repo"
+BUNDLE="$OUT/org.gaimsdevsoftware.TellyKeys.flatpak"
+
+command -v flatpak-builder >/dev/null 2>&1 || {
+  echo "flatpak-builder is not installed. On Fedora: sudo dnf install flatpak-builder" >&2
+  echo "On Mint/Ubuntu: sudo apt install flatpak-builder" >&2
+  exit 1
+}
+
+mkdir -p "$OUT"
+flatpak-builder --force-clean --repo="$REPO" "$ROOT/build/flatpak" "$MANIFEST"
+flatpak build-bundle "$REPO" "$BUNDLE" org.gaimsdevsoftware.TellyKeys
+echo "$BUNDLE"

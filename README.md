@@ -1,189 +1,187 @@
 # TellyKeys
 
-TellyKeys is a small Linux desktop remote for Google TV and Android TV.
+**A polished Linux desktop remote for Google TV and Android TV.**
 
-It uses Android TV Remote Protocol v2 through `androidtvremote2`, the same family of network remote protocol used by the official Google TV mobile app. It does not require ADB or developer mode on the TV.
+TellyKeys gives Linux users a simple, friendly Google TV remote with pairing,
+D-pad controls, app shortcuts, text input, optional Bluetooth keyboard mode, and
+experimental voice search.
 
-## Install and run
+It is built for the “it should just work” desktop experience: discover the TV,
+pair once, then use the large remote controls without thinking about protocols,
+ADB, or terminal commands.
+
+![TellyKeys icon](assets/tellykeys.svg)
+
+## Download
+
+Packages will be attached to GitHub Releases as they are built:
+
+| Platform | Package | Status |
+| --- | --- | --- |
+| Linux Mint / Ubuntu | [`tellykeys_0.1.0_all.deb`](https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/tellykeys_0.1.0_all.deb) | Available after the first release upload |
+| Fedora / RPM distros | [`tellykeys-0.1.0-1.noarch.rpm`](https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/tellykeys-0.1.0-1.noarch.rpm) | Coming soon |
+| Cross-distro Linux | [`org.gaimsdevsoftware.TellyKeys.flatpak`](https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/org.gaimsdevsoftware.TellyKeys.flatpak) | Coming soon |
+
+Until the first release assets are uploaded, install from source:
 
 ```bash
-cd /home/robert/Dokumenter/Kode-prosjekter/tellykeys
+git clone https://github.com/GaimsDevSoftware/tellykeys.git
+cd tellykeys
 python3 -m venv --system-site-packages .venv
 . .venv/bin/activate
 python -m pip install -e .
 tellykeys
 ```
 
-System dependency on Linux Mint:
+Linux Mint dependencies:
 
 ```bash
-sudo apt install python3-gi gir1.2-gtk-3.0 avahi-utils
+sudo apt install python3-gi gir1.2-gtk-3.0 avahi-utils pipewire-bin pulseaudio-utils
 ```
 
-`python3-gi`, GTK 3 and `avahi-browse` are already present on Robert's machine as of 2026-05-30.
+Fedora dependencies:
 
-## Usage
+```bash
+sudo dnf install python3-gobject gtk3 avahi-tools pipewire-utils pulseaudio-utils
+```
 
-1. Open TellyKeys.
-2. Wait while it finds the TV and connects.
-3. If the TV shows a pairing code, type it into TellyKeys and click `Done`.
-4. Use the big remote buttons.
+## Highlights
 
-The app remembers the TV after pairing. Next launch should go straight to connecting.
+- Finds Google TV / Android TV devices on the local network.
+- Pairs with the six-character code shown on the TV.
+- Large, simple remote buttons for D-pad, OK, Back, Home, Menu, volume, mute, and media.
+- App shortcut popover with editable/removable buttons.
+- Text input with contextual YouTube search fallback.
+- Optional Bluetooth keyboard mode for apps that reject remote text input.
+- Experimental voice search using the Linux microphone.
+- Tray mode and optional Cinnamon applet.
+- Settings and help pages built into the app.
 
-Use `Options` only if auto-discovery fails or you want to enter an app-id / URL manually.
-Options opens as a settings page inside the same window, not as a separate popup.
+## How It Works
 
-Under `Options` you can also:
+TellyKeys uses Android TV Remote Protocol v2 through
+[`androidtvremote2`](https://github.com/tronikos/androidtvremote2), the same
+family of network remote protocol used by the official Google TV mobile app.
 
-- delete the selected TV, including its pairing key
-- reset TellyKeys back to first-run state
+ADB is not required for normal pairing and remote control. ADB is only used as an
+optional fallback for text input and some system settings shortcuts.
 
-Connected devices are remembered in:
+Pairing data is stored locally:
 
 ```text
-~/.config/tellykeys/settings.json
+~/.config/tellykeys/
 ```
 
-Pairing certificates are stored under:
+## Text Input
 
-```text
-~/.config/tellykeys/devices/
-```
+Text input is difficult on Google TV because apps behave differently.
 
-## Keyboard shortcuts
+TellyKeys uses several strategies:
+
+- YouTube: opens a YouTube search URL directly when YouTube is active.
+- Bluetooth keyboard mode: sends text as a paired Bluetooth keyboard.
+- ADB: optional fallback when developer/network debugging is enabled.
+- Remote IME: Google TV remote text protocol fallback.
+
+If text does not appear, open `Options > Text > Text input help`.
+
+## Voice Search
+
+Voice search is experimental but working on the protocol side.
+
+TellyKeys opens a Google TV voice session and streams microphone audio as
+16-bit PCM, mono, 8000 Hz. On PipeWire systems it prefers `pw-record`; `parec`
+is used as fallback.
+
+If Google TV opens voice search but does not hear you:
+
+1. Open `Options > Text`.
+2. Select the real microphone source, not a monitor source.
+3. Press `Test mic`.
+4. Try `Voice search` again.
+
+Voice search auto-stops after:
+
+- 3 seconds of silence after speech was heard
+- 8 seconds if no speech is heard
+
+## Keyboard Shortcuts
 
 When the main window has focus and you are not typing in a text field:
 
-- Arrow keys: D-pad
-- Enter: OK
-- Backspace or Escape: Back
-- Home: Home
-- Space: Play/Pause
-- `+` / `-`: Volume
-- `m`: Mute
-- `p`: Power
+| Key | Action |
+| --- | --- |
+| Arrow keys | D-pad |
+| Enter | OK |
+| Backspace / Escape | Back |
+| Home | Home |
+| Space | Play / Pause |
+| `+` / `-` | Volume |
+| `m` | Mute |
+| `p` | Power |
 
-## Text input
+## Optional Tray And Cinnamon Applet
 
-When YouTube is the active TV app, TellyKeys opens a YouTube search link directly instead of trying to type through the on-screen keyboard. This avoids a known Sony/YouTube remote-keyboard failure mode.
-
-For other apps, TellyKeys first tries Android Debug Bridge text input if `adb` is installed and the TV is authorized on port `5555`. If that is not available, it falls back to Google TV Remote Protocol IME text input.
-
-ADB text input is optional, but it is more reliable on some Google TV on-screen keyboards and apps:
-
-```bash
-sudo apt install adb
-adb connect TV_IP_ADDRESS:5555
-```
-
-The TV must have developer/network debugging enabled and must accept the authorization prompt.
-
-If text does not appear on the TV, open `Options` and click `Text input help`.
-The dialog shows whether ADB is installed/authorized and whether the TV has sent
-Remote IME text-field counters to TellyKeys.
-
-Known Sony Bravia checks:
-
-- Set the TV keyboard to Gboard or Leanback Keyboard, not Virtual Remote Keyboard.
-- Clear `Android TV Remote Service` storage on the TV, then re-pair TellyKeys.
-- Some Sony Bravia models/apps, including YouTube on some models, reject remote software-keyboard text even when the field is active.
-
-### Bluetooth keyboard mode
-
-TellyKeys can also try to act as a Bluetooth keyboard. Open `Options`, click
-`Set up Bluetooth keyboard`, then pair `TellyKeys Keyboard` from the TV's
-Bluetooth accessory menu. After pairing, enable `Use Bluetooth keyboard for text`.
-The text box shows whether the keyboard is ready to pair, connected, or whether
-setup is still needed.
-
-This creates and starts a user-level systemd service:
-
-```text
-~/.config/systemd/user/tellykeys-bluetooth-keyboard.service
-```
-
-No sudo is used by TellyKeys for this setup. Some Bluetooth stacks may still
-require deeper system configuration, so this mode is intentionally marked
-experimental.
-
-Use `Reset Bluetooth keyboard` to stop the helper and remove the local setup.
-If TellyKeys had to apply the BlueZ system fix, reset will ask for permission
-to restore the normal Bluetooth service.
-
-Norwegian `æ`, `ø`, and `å` are sent using Norwegian keyboard positions. If the
-TV is set to a non-Norwegian physical keyboard layout, those keys may appear as
-`'`, `;`, and `[`.
-
-## Voice search
-
-TellyKeys has an experimental `Voice search` button. It opens a Google TV voice
-session through Android TV Remote Protocol v2 and streams audio from the default
-Linux microphone using `parec` as 16-bit PCM, mono, 8000 Hz.
-
-On Linux Mint this normally works through PipeWire/PulseAudio compatibility. If
-voice search cannot start, check that `parec` exists and that the default system
-microphone works in the sound settings.
-
-If the TV opens voice search but does not hear you, open `Options > Text` and
-choose the microphone explicitly. TellyKeys filters out monitor sources because
-those record speaker output rather than your microphone.
-
-## Next engineering plan
-
-1. Test voice search on Sony Bravia, including Google TV home search and YouTube.
-2. Test Bluetooth text in Netflix, Prime Video, Disney+, and Google TV search.
-3. Move reliable setup flows into calmer first-run screens.
-4. Add a package build for Linux Mint Cinnamon with app launcher, tray launcher, icon, helper scripts, and Cinnamon applet.
-5. Add a safer packaging-time prompt for the BlueZ system fix, because it changes host Bluetooth behavior.
-6. Improve the connected-state visual design before packaging.
-
-## Desktop launcher
-
-Install the launcher without sudo:
-
-```bash
-cd /home/robert/Dokumenter/Kode-prosjekter/tellykeys
-scripts/install-desktop-launcher
-```
-
-This installs both:
-
-- `TellyKeys`
-- `TellyKeys Tray`
-
-## Tray mode
-
-Run TellyKeys with a tray/status icon:
+Run in tray mode:
 
 ```bash
 tellykeys --tray
 ```
 
-Start it hidden in the tray:
+Start hidden in the tray:
 
 ```bash
 tellykeys --start-hidden
 ```
 
-The tray menu can show/hide the app, send power/volume/mute, and quit TellyKeys.
-
-## Cinnamon applet
-
-Install the optional Cinnamon panel applet:
+Install the Cinnamon applet from source:
 
 ```bash
-cd /home/robert/Dokumenter/Kode-prosjekter/tellykeys
 scripts/install-cinnamon-applet
 ```
 
-Then add it from Cinnamon's applet settings. The applet can open TellyKeys, start tray mode, or quit TellyKeys.
+## Building Packages
 
-## Similar Linux tools found
+Build a Debian package for Linux Mint / Ubuntu:
 
-- `gtv-remote`: Python CLI for Google TV / Android TV Remote Control Protocol v2.
-- `androidtv-remote-cli`: Node.js terminal remote with pairing and D-pad mode.
-- `atvremote`: Go CLI/library supporting Android TV / Google TV remote protocol v2.
-- ADB wrappers such as `android-tv-remote`: work differently and require ADB/developer mode.
+```bash
+scripts/build-deb
+```
 
-I did not find a mature native Linux GTK-style desktop GUI that does exactly this.
+Build an RPM package for Fedora / RPM distros:
+
+```bash
+scripts/build-rpm
+```
+
+Build a Flatpak bundle:
+
+```bash
+scripts/build-flatpak
+```
+
+Build outputs are written to:
+
+```text
+dist/
+```
+
+## Project Status
+
+TellyKeys is under active development. The Linux Mint/Cinnamon experience is the
+primary target right now, with Fedora/RPM and Flatpak packaging being added next.
+macOS and Windows ports are planned later.
+
+Known rough edges:
+
+- Bluetooth keyboard mode may require BlueZ configuration on some systems.
+- Voice search depends on TV support for third-party remote voice sessions.
+- App-specific text input varies by TV app.
+
+## Similar Linux Tools
+
+Linux has several CLI tools for Android TV / Google TV remote control, including
+`gtv-remote`, `androidtv-remote-cli`, `atvremote`, and ADB wrappers.
+
+TellyKeys aims to be the polished GTK desktop app version: approachable,
+visual, and comfortable for daily use.
