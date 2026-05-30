@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP_DIR="$HOME/.local/share/applications"
+ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
+
+mkdir -p "$APP_DIR" "$ICON_DIR"
+cp "$ROOT/assets/tellykeys.svg" "$ICON_DIR/tellykeys.svg"
+cp "$ROOT/packaging/tellykeys.desktop" "$APP_DIR/tellykeys.desktop"
+cp "$ROOT/packaging/tellykeys-tray.desktop" "$APP_DIR/tellykeys-tray.desktop"
+
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database "$APP_DIR" >/dev/null 2>&1 || true
+fi
+
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  gtk-update-icon-cache -f "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
+fi
+
+echo "Installed TellyKeys launcher."

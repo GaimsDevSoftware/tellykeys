@@ -1,0 +1,7 @@
+{
+  "uuid": "tellykeys@robert",
+  "name": "TellyKeys",
+  "description": "Panel launcher for TellyKeys Google TV remote",
+  "icon": "tellykeys",
+  "max-instances": 1
+}

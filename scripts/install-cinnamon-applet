@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APPLET_DIR="$HOME/.local/share/cinnamon/applets/tellykeys@robert"
+
+mkdir -p "$APPLET_DIR"
+cp "$ROOT/cinnamon-applet/tellykeys@robert/"* "$APPLET_DIR/"
+
+echo "Installed TellyKeys Cinnamon applet."
+echo "Add it from Cinnamon: System Settings > Applets > Download/Manage > TellyKeys."

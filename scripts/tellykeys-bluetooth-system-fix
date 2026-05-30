@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+dropin_dir=/etc/systemd/system/bluetooth.service.d
+dropin_file="$dropin_dir/tellykeys-hid-keyboard.conf"
+
+mkdir -p "$dropin_dir"
+cat > "$dropin_file" <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/usr/libexec/bluetooth/bluetoothd --noplugin=input
+EOF
+
+systemctl daemon-reload
+systemctl restart bluetooth.service

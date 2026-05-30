@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=TellyKeys Tray
+Comment=Tray remote control for Google TV and Android TV
+Exec=/home/robert/Dokumenter/Kode-prosjekter/tellykeys/.venv/bin/tellykeys --start-hidden
+Icon=tellykeys
+Terminal=false
+Categories=Utility;AudioVideo;RemoteAccess;
+StartupNotify=false

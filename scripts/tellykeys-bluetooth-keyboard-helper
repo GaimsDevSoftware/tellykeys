@@ -1,0 +1,316 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import os
+import socket
+import sys
+import threading
+import time
+from pathlib import Path
+
+import dbus
+import dbus.service
+import dbus.mainloop.glib
+from gi.repository import GLib
+
+
+PROFILE_PATH = "/tellykeys/hid_profile"
+HID_UUID = "00001124-0000-1000-8000-00805f9b34fb"
+SOCKET_PATH = Path.home() / ".cache" / "tellykeys" / "bluetooth-keyboard.sock"
+
+
+HID_SERVICE_RECORD = """
+<?xml version="1.0" encoding="UTF-8" ?>
+<record>
+  <attribute id="0x0001">
+    <sequence>
+      <uuid value="0x1124" />
+    </sequence>
+  </attribute>
+  <attribute id="0x0004">
+    <sequence>
+      <sequence>
+        <uuid value="0x0100" />
+        <uint16 value="0x0011" />
+      </sequence>
+      <sequence>
+        <uuid value="0x0011" />
+      </sequence>
+    </sequence>
+  </attribute>
+  <attribute id="0x0005">
+    <sequence>
+      <uuid value="0x1002" />
+    </sequence>
+  </attribute>
+  <attribute id="0x0006">
+    <sequence>
+      <uint16 value="0x656e" />
+      <uint16 value="0x006a" />
+      <uint16 value="0x0100" />
+    </sequence>
+  </attribute>
+  <attribute id="0x0009">
+    <sequence>
+      <sequence>
+        <uuid value="0x1124" />
+        <uint16 value="0x0100" />
+      </sequence>
+    </sequence>
+  </attribute>
+  <attribute id="0x0100">
+    <text value="TellyKeys Keyboard" />
+  </attribute>
+  <attribute id="0x0101">
+    <text value="Experimental Bluetooth keyboard for TellyKeys" />
+  </attribute>
+  <attribute id="0x0102">
+    <text value="TellyKeys" />
+  </attribute>
+  <attribute id="0x0201">
+    <uint16 value="0x0111" />
+  </attribute>
+  <attribute id="0x0202">
+    <uint8 value="0x40" />
+  </attribute>
+  <attribute id="0x0203">
+    <uint8 value="0x21" />
+  </attribute>
+  <attribute id="0x0204">
+    <boolean value="true" />
+  </attribute>
+  <attribute id="0x0205">
+    <boolean value="true" />
+  </attribute>
+  <attribute id="0x0206">
+    <sequence>
+      <sequence>
+        <uint8 value="0x22" />
+        <text encoding="hex" value="05010906a101050719e029e71500250175019508810295017508810195057501050819012905910295017503910195067508150025ff0507190029ff8100c0" />
+      </sequence>
+    </sequence>
+  </attribute>
+  <attribute id="0x0207">
+    <sequence>
+      <sequence>
+        <uint16 value="0x0409" />
+        <uint16 value="0x0100" />
+      </sequence>
+    </sequence>
+  </attribute>
+  <attribute id="0x020b">
+    <uint16 value="0x0100" />
+  </attribute>
+  <attribute id="0x020d">
+    <boolean value="false" />
+  </attribute>
+  <attribute id="0x020e">
+    <boolean value="true" />
+  </attribute>
+</record>
+"""
+
+
+KEYS: dict[str, tuple[int, int]] = {
+    "a": (0, 0x04),
+    "b": (0, 0x05),
+    "c": (0, 0x06),
+    "d": (0, 0x07),
+    "e": (0, 0x08),
+    "f": (0, 0x09),
+    "g": (0, 0x0A),
+    "h": (0, 0x0B),
+    "i": (0, 0x0C),
+    "j": (0, 0x0D),
+    "k": (0, 0x0E),
+    "l": (0, 0x0F),
+    "m": (0, 0x10),
+    "n": (0, 0x11),
+    "o": (0, 0x12),
+    "p": (0, 0x13),
+    "q": (0, 0x14),
+    "r": (0, 0x15),
+    "s": (0, 0x16),
+    "t": (0, 0x17),
+    "u": (0, 0x18),
+    "v": (0, 0x19),
+    "w": (0, 0x1A),
+    "x": (0, 0x1B),
+    "y": (0, 0x1C),
+    "z": (0, 0x1D),
+    "1": (0, 0x1E),
+    "2": (0, 0x1F),
+    "3": (0, 0x20),
+    "4": (0, 0x21),
+    "5": (0, 0x22),
+    "6": (0, 0x23),
+    "7": (0, 0x24),
+    "8": (0, 0x25),
+    "9": (0, 0x26),
+    "0": (0, 0x27),
+    " ": (0, 0x2C),
+    "-": (0, 0x2D),
+    "=": (0, 0x2E),
+    "[": (0, 0x2F),
+    "]": (0, 0x30),
+    "\\": (0, 0x31),
+    ";": (0, 0x33),
+    "'": (0, 0x34),
+    "`": (0, 0x35),
+    ",": (0, 0x36),
+    ".": (0, 0x37),
+    "/": (0, 0x38),
+    "ø": (0, 0x33),
+    "æ": (0, 0x34),
+    "å": (0, 0x2F),
+}
+
+SHIFT_KEYS = {
+    "!": "1",
+    "@": "2",
+    "#": "3",
+    "$": "4",
+    "%": "5",
+    "^": "6",
+    "&": "7",
+    "*": "8",
+    "(": "9",
+    ")": "0",
+    "_": "-",
+    "+": "=",
+    "{": "[",
+    "}": "]",
+    "|": "\\",
+    ":": ";",
+    '"': "'",
+    "~": "`",
+    "<": ",",
+    ">": ".",
+    "?": "/",
+    "Ø": "ø",
+    "Æ": "æ",
+    "Å": "å",
+}
+
+
+class HIDProfile(dbus.service.Object):
+    def __init__(self, bus: dbus.SystemBus) -> None:
+        super().__init__(bus, PROFILE_PATH)
+        self.interrupt_socket: socket.socket | None = None
+
+    @property
+    def connected(self) -> bool:
+        return self.interrupt_socket is not None
+
+    @dbus.service.method("org.bluez.Profile1", in_signature="", out_signature="")
+    def Release(self) -> None:
+        print("BlueZ released HID profile")
+        GLib.MainLoop().quit()
+
+    @dbus.service.method("org.bluez.Profile1", in_signature="oha{sv}", out_signature="")
+    def NewConnection(self, _device, fd, _properties) -> None:
+        raw_fd = fd.take()
+        self.interrupt_socket = socket.socket(fileno=raw_fd)
+        self.interrupt_socket.setblocking(True)
+        print("Bluetooth HID connection ready")
+
+    @dbus.service.method("org.bluez.Profile1", in_signature="o", out_signature="")
+    def RequestDisconnection(self, _device) -> None:
+        if self.interrupt_socket:
+            self.interrupt_socket.close()
+            self.interrupt_socket = None
+        print("Bluetooth HID disconnected")
+
+    def send_text(self, text: str) -> bool:
+        if not self.interrupt_socket:
+            return False
+        for char in text:
+            self._send_char(char)
+        return True
+
+    def _send_char(self, char: str) -> None:
+        key = char.lower()
+        modifier = 0
+        if char.isalpha() and char.isupper():
+            modifier = 0x02
+        elif char in SHIFT_KEYS:
+            modifier = 0x02
+            key = SHIFT_KEYS[char]
+
+        code = KEYS.get(key)
+        if not code:
+            return
+
+        base_modifier, usage = code
+        self._write_report(modifier or base_modifier, usage)
+        time.sleep(0.02)
+        self._write_report(0, 0)
+        time.sleep(0.01)
+
+    def _write_report(self, modifier: int, usage: int) -> None:
+        if not self.interrupt_socket:
+            return
+        report = bytes([0xA1, 0x01, modifier, 0, usage, 0, 0, 0, 0, 0])
+        self.interrupt_socket.send(report)
+
+
+def serve_local_socket(profile: HIDProfile) -> None:
+    SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        SOCKET_PATH.unlink()
+    except FileNotFoundError:
+        pass
+
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(str(SOCKET_PATH))
+    server.listen(4)
+    os.chmod(SOCKET_PATH, 0o600)
+    print(f"TellyKeys Bluetooth helper socket: {SOCKET_PATH}")
+
+    while True:
+        conn, _addr = server.accept()
+        with conn:
+            data = conn.recv(65536).strip()
+            try:
+                message = json.loads(data.decode("utf-8"))
+            except json.JSONDecodeError:
+                conn.sendall(b"ERR\n")
+                continue
+
+            if message.get("type") == "ping":
+                conn.sendall(b"OK\n")
+            elif message.get("type") == "status":
+                payload = json.dumps({"connected": profile.connected}).encode("utf-8") + b"\n"
+                conn.sendall(payload)
+            elif message.get("type") == "text" and isinstance(message.get("text"), str):
+                conn.sendall(b"OK\n" if profile.send_text(message["text"]) else b"NO_CONNECTION\n")
+            else:
+                conn.sendall(b"ERR\n")
+
+
+def main() -> int:
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SystemBus()
+    profile = HIDProfile(bus)
+    manager = dbus.Interface(bus.get_object("org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
+    manager.RegisterProfile(
+        PROFILE_PATH,
+        HID_UUID,
+        {
+            "ServiceRecord": HID_SERVICE_RECORD,
+            "Role": "server",
+            "RequireAuthentication": True,
+            "RequireAuthorization": False,
+            "Name": "TellyKeys Keyboard",
+        },
+    )
+
+    threading.Thread(target=serve_local_socket, args=(profile,), daemon=True).start()
+    print("Pair the TV with this computer as a Bluetooth keyboard named TellyKeys Keyboard.")
+    GLib.MainLoop().run()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

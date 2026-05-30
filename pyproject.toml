@@ -1,0 +1,19 @@
+[project]
+name = "tellykeys"
+version = "0.1.0"
+description = "A small Linux desktop remote for Google TV and Android TV."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "androidtvremote2>=0.3.1",
+]
+
+[project.scripts]
+tellykeys = "tellykeys.app:main"
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=TellyKeys
+Comment=Remote control for Google TV and Android TV
+Exec=/home/robert/Dokumenter/Kode-prosjekter/tellykeys/.venv/bin/tellykeys
+Icon=tellykeys
+Terminal=false
+Categories=Utility;AudioVideo;RemoteAccess;
+StartupNotify=true
