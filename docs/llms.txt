@@ -1,0 +1,61 @@
+# TellyKeys
+
+> A polished GTK desktop remote for Google TV and Android TV on Linux. Pair with the
+> on-screen six-character code, then control the TV with D-pad buttons, app shortcuts,
+> text input, an optional Bluetooth keyboard mode, and experimental voice search.
+> Built first for Linux Mint and Ubuntu, with Fedora and Flatpak packaging in progress.
+
+TellyKeys speaks the Android TV Remote Protocol v2 over the local network — the same
+family of network remote protocol used by the official Google TV mobile app. ADB is not
+required for normal pairing and remote control; it is only an optional fallback for some
+text input and system settings shortcuts. Pairing data is stored locally in
+`~/.config/tellykeys/`. No cloud account is required.
+
+## Links
+
+- Website: https://gaimsdevsoftware.github.io/tellykeys/
+- Source code: https://github.com/GaimsDevSoftware/tellykeys
+- Latest release: https://github.com/GaimsDevSoftware/tellykeys/releases/latest
+- Debian package (Linux Mint / Ubuntu): https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/tellykeys_0.1.0_all.deb
+
+## Features
+
+- Discovers Google TV / Android TV devices on the local network.
+- Pairs with the six-character code shown on the TV.
+- Large remote buttons: D-pad, OK, Back, Home, Menu, volume, mute, power, and media controls.
+- Editable and removable app shortcut buttons.
+- Text input with a contextual YouTube search fallback when YouTube is active.
+- Optional Bluetooth keyboard mode for apps that reject remote text input (confirmed working in YouTube).
+- Experimental voice search that streams the Linux microphone (16-bit PCM, mono, 8000 Hz; prefers pw-record, falls back to parec).
+- Tray mode and an optional Cinnamon applet.
+- Built-in settings and help pages, including microphone selection.
+
+## Platforms
+
+- Linux Mint and Ubuntu: primary target, `.deb` package available.
+- Fedora and other RPM distributions: supported from source; RPM package in progress.
+- Cross-distro Flatpak: in progress.
+- macOS and Windows: planned later, not yet available.
+
+## Text input strategies
+
+Google TV apps handle text differently, so TellyKeys tries, in order of context:
+
+1. YouTube — opens a YouTube search URL directly when YouTube is active.
+2. Bluetooth keyboard mode — sends text as a paired Bluetooth keyboard.
+3. ADB — optional fallback when developer / network debugging is enabled.
+4. Remote IME — Google TV remote text protocol fallback.
+
+## Honest limitations
+
+- Bluetooth keyboard mode may require BlueZ configuration on some systems.
+- Voice search depends on the TV supporting third-party remote voice sessions and is experimental.
+- App-specific text input behavior varies by Google TV app.
+- RPM and Flatpak packages are not yet released; use the source install on those platforms.
+- TellyKeys is version 0.1.0 and under active development.
+
+## Keywords
+
+Google TV remote for Linux, Android TV remote app for Linux, Linux Mint Google TV remote,
+Fedora Android TV remote, send text to Google TV from Linux, Bluetooth keyboard for Google TV
+on Linux, voice search Google TV Linux, YouTube voice search Google TV Linux.

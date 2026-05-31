@@ -10,6 +10,8 @@ It is built for the “it should just work” desktop experience: discover the T
 pair once, then use the large remote controls without thinking about protocols,
 ADB, or terminal commands.
 
+**Website:** [gaimsdevsoftware.github.io/tellykeys](https://gaimsdevsoftware.github.io/tellykeys/)
+
 ![TellyKeys main remote](assets/screenshots/tellykeys-main.png)
 
 ## Download

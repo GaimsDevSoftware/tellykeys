@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>TellyKeys — Google TV &amp; Android TV Remote for Linux</title>
+  <meta name="description" content="TellyKeys is a polished GTK desktop remote for Google TV and Android TV on Linux. Pair with the on-screen code, then use D-pad controls, send text input, a Bluetooth keyboard mode, and experimental voice search. Built for Linux Mint, Ubuntu, and Fedora.">
+  <link rel="canonical" href="https://gaimsdevsoftware.github.io/tellykeys/">
+  <meta name="theme-color" content="#0b0d12">
+  <meta name="keywords" content="Google TV remote for Linux, Android TV remote app for Linux, Linux Mint Google TV remote, Fedora Android TV remote, send text to Google TV from Linux, Bluetooth keyboard for Google TV on Linux, voice search Google TV Linux, YouTube voice search Google TV Linux">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="TellyKeys">
+  <meta property="og:title" content="TellyKeys — Google TV &amp; Android TV Remote for Linux">
+  <meta property="og:description" content="A polished Linux desktop remote for Google TV and Android TV: pairing, D-pad, text input, Bluetooth keyboard mode, and experimental voice search. Linux Mint, Ubuntu, Fedora.">
+  <meta property="og:url" content="https://gaimsdevsoftware.github.io/tellykeys/">
+  <meta property="og:image" content="https://gaimsdevsoftware.github.io/tellykeys/assets/tellykeys-main.png">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="TellyKeys — Google TV &amp; Android TV Remote for Linux">
+  <meta name="twitter:description" content="A polished Linux desktop remote for Google TV and Android TV: pairing, D-pad, text input, Bluetooth keyboard mode, and experimental voice search.">
+  <meta name="twitter:image" content="https://gaimsdevsoftware.github.io/tellykeys/assets/tellykeys-main.png">
+
+  <link rel="icon" type="image/svg+xml" href="assets/tellykeys.svg">
+
+  <!-- SoftwareApplication structured data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "TellyKeys",
+    "applicationCategory": "UtilitiesApplication",
+    "applicationSubCategory": "Remote Control",
+    "operatingSystem": "Linux",
+    "description": "A polished GTK desktop remote for Google TV and Android TV on Linux. Discover and pair with a TV, then use D-pad controls, app shortcuts, text input, an optional Bluetooth keyboard mode, and experimental voice search. Built for Linux Mint, Ubuntu, and Fedora.",
+    "url": "https://gaimsdevsoftware.github.io/tellykeys/",
+    "downloadUrl": "https://github.com/GaimsDevSoftware/tellykeys/releases/latest",
+    "softwareVersion": "0.1.0",
+    "license": "https://github.com/GaimsDevSoftware/tellykeys",
+    "isAccessibleForFree": true,
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Organization",
+      "name": "GaimsDevSoftware",
+      "url": "https://github.com/GaimsDevSoftware"
+    },
+    "screenshot": "https://gaimsdevsoftware.github.io/tellykeys/assets/tellykeys-main.png",
+    "featureList": [
+      "Discovers Google TV and Android TV devices on the local network",
+      "Pairs with the six-character code shown on the TV",
+      "D-pad, OK, Back, Home, Menu, volume, mute, and media controls",
+      "Editable and removable app shortcuts",
+      "Text input with contextual YouTube search fallback",
+      "Optional Bluetooth keyboard mode for apps that reject remote text input",
+      "Experimental voice search using the Linux microphone",
+      "Tray mode and optional Cinnamon applet"
+    ]
+  }
+  </script>
+
+  <!-- FAQ structured data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Does TellyKeys work as a Google TV remote on Linux?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. TellyKeys is a desktop app for Linux that controls Google TV and Android TV over the local network using the Android TV Remote Protocol v2 — the same family of protocol used by the official Google TV mobile app. No ADB is required for normal pairing and remote control."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Which Linux distributions are supported?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Linux Mint and Ubuntu are the primary targets, with a .deb package available. Fedora and other RPM distributions are supported from source, with RPM and Flatpak packages being added. macOS and Windows ports are planned later."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I send text to Google TV from Linux?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. TellyKeys sends text input to the TV. Because Google TV apps handle text differently, it uses several strategies: a direct YouTube search when YouTube is active, an optional Bluetooth keyboard mode, an optional ADB fallback, and the remote IME protocol."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does TellyKeys support voice search?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Voice search is experimental. TellyKeys opens a Google TV voice session and streams microphone audio as 16-bit PCM, mono, 8000 Hz, preferring pw-record on PipeWire systems with parec as a fallback. It depends on the TV supporting third-party remote voice sessions."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --bg-soft: #11141b;
+      --card: #161a23;
+      --border: #232834;
+      --text: #e7eaf0;
+      --muted: #9aa3b2;
+      --accent: #5b8cff;
+      --accent-soft: #1d2740;
+      --green: #3ecf8e;
+      --radius: 14px;
+      --maxw: 1080px;
+      font-synthesis: none;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: radial-gradient(1200px 600px at 50% -200px, #18203a 0%, var(--bg) 60%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Cantarell", sans-serif;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+    header.nav {
+      position: sticky; top: 0; z-index: 10;
+      backdrop-filter: blur(12px);
+      background: rgba(11, 13, 18, 0.72);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.01em; }
+    .brand img { width: 26px; height: 26px; }
+    .nav-links { display: flex; gap: 22px; font-size: 14px; }
+    .nav-links a { color: var(--muted); }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    @media (max-width: 640px) { .nav-links { display: none; } }
+
+    .hero { padding: 80px 0 40px; }
+    .hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 56px; align-items: center; }
+    @media (max-width: 860px) { .hero-grid { grid-template-columns: 1fr; gap: 36px; } }
+    .eyebrow {
+      display: inline-block; font-size: 13px; font-weight: 600; color: var(--accent);
+      background: var(--accent-soft); padding: 5px 12px; border-radius: 999px; margin-bottom: 18px;
+      border: 1px solid #29406e;
+    }
+    h1 { font-size: clamp(34px, 5vw, 52px); line-height: 1.08; letter-spacing: -0.02em; margin: 0 0 18px; }
+    h1 .grad { background: linear-gradient(120deg, #8fb1ff, #5b8cff 60%, #3ecf8e); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .lead { font-size: 19px; color: var(--muted); max-width: 36ch; }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 30px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 22px; border-radius: 11px; font-weight: 600; font-size: 15px;
+      border: 1px solid transparent; transition: transform .12s ease, background .2s ease;
+    }
+    .btn:hover { text-decoration: none; transform: translateY(-1px); }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #6f9bff; }
+    .btn-ghost { background: var(--card); color: var(--text); border-color: var(--border); }
+    .btn-ghost:hover { border-color: #33415c; }
+
+    .shot { display: flex; justify-content: center; }
+    .shot img {
+      max-width: 300px; width: 100%; border-radius: 18px;
+      border: 1px solid var(--border);
+      box-shadow: 0 30px 70px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.02) inset;
+    }
+
+    section { padding: 56px 0; border-top: 1px solid var(--border); }
+    section h2 { font-size: clamp(24px, 3.2vw, 32px); letter-spacing: -0.02em; margin: 0 0 8px; }
+    section .sub { color: var(--muted); margin: 0 0 30px; max-width: 60ch; }
+
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 22px;
+    }
+    .card h3 { margin: 0 0 6px; font-size: 17px; }
+    .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+    .card .ic { font-size: 22px; margin-bottom: 12px; display: block; }
+
+    .pills { display: flex; flex-wrap: wrap; gap: 10px; }
+    .pill { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 999px; padding: 8px 16px; font-size: 14px; color: var(--text); }
+    .pill b { color: var(--green); font-weight: 600; }
+
+    table.dl { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    table.dl th, table.dl td { text-align: left; padding: 14px 18px; border-bottom: 1px solid var(--border); font-size: 14.5px; }
+    table.dl th { color: var(--muted); font-weight: 600; background: var(--bg-soft); }
+    table.dl tr:last-child td { border-bottom: none; }
+    .badge { font-size: 12px; padding: 3px 10px; border-radius: 999px; font-weight: 600; }
+    .badge.ok { background: rgba(62,207,142,0.14); color: var(--green); }
+    .badge.soon { background: rgba(154,163,178,0.14); color: var(--muted); }
+    pre { background: #0c0f15; border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; overflow-x: auto; font-size: 13.5px; line-height: 1.5; }
+    code { font-family: "SF Mono", ui-monospace, "JetBrains Mono", "Cascadia Code", Menlo, monospace; }
+
+    details { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0 20px; margin-bottom: 12px; }
+    details summary { cursor: pointer; padding: 16px 0; font-weight: 600; list-style: none; }
+    details summary::-webkit-details-marker { display: none; }
+    details summary::after { content: "+"; float: right; color: var(--muted); font-weight: 400; }
+    details[open] summary::after { content: "–"; }
+    details p { color: var(--muted); margin: 0 0 16px; }
+
+    .limits li { color: var(--muted); margin-bottom: 8px; }
+
+    footer { border-top: 1px solid var(--border); padding: 40px 0 60px; color: var(--muted); font-size: 14px; }
+    footer .wrap { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; }
+    footer a { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap">
+      <div class="brand"><img src="assets/tellykeys.svg" alt="TellyKeys logo" onerror="this.style.display='none'"> TellyKeys</div>
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#download">Download</a>
+        <a href="#text-input">Text input</a>
+        <a href="#voice">Voice search</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/GaimsDevSoftware/tellykeys">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" style="border-top: none;">
+      <div class="wrap hero-grid">
+        <div>
+          <span class="eyebrow">Google TV &amp; Android TV remote for Linux</span>
+          <h1>Your TV remote, <span class="grad">on the Linux desktop.</span></h1>
+          <p class="lead">TellyKeys is a polished GTK app that pairs with Google TV and Android TV, then gives you D-pad controls, text input, a Bluetooth keyboard mode, and experimental voice search — no ADB, no terminal.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="#download">Download for Linux</a>
+            <a class="btn btn-ghost" href="https://github.com/GaimsDevSoftware/tellykeys">View on GitHub</a>
+          </div>
+        </div>
+        <div class="shot">
+          <img src="assets/tellykeys-main.png" alt="TellyKeys main remote window controlling a Google TV from Linux" width="840" height="1502" loading="eager">
+        </div>
+      </div>
+    </section>
+
+    <section id="what">
+      <div class="wrap">
+        <h2>What is TellyKeys?</h2>
+        <p class="sub">Linux has plenty of command-line tools for Android TV. TellyKeys is the polished desktop version — approachable, visual, and comfortable for daily use.</p>
+        <p style="color: var(--muted); max-width: 70ch;">It speaks the Android TV Remote Protocol v2 over your local network — the same family of protocol used by the official Google TV mobile app. Discover the TV, pair once with the six-character code shown on screen, then control it with large, simple buttons. ADB is optional and only used as a fallback for some text input and system shortcuts.</p>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <h2>Features</h2>
+        <p class="sub">Everything you need to drive a Google TV from your desk, without thinking about protocols.</p>
+        <div class="grid">
+          <div class="card"><span class="ic">📡</span><h3>Discover &amp; pair</h3><p>Finds Google TV and Android TV devices on your network and pairs with the six-character code shown on the TV.</p></div>
+          <div class="card"><span class="ic">🎮</span><h3>Full remote</h3><p>Large buttons for D-pad, OK, Back, Home, Menu, volume, mute, power, and media playback.</p></div>
+          <div class="card"><span class="ic">⌨️</span><h3>Text input</h3><p>Send text to the TV with a contextual YouTube search fallback when YouTube is active.</p></div>
+          <div class="card"><span class="ic">🔵</span><h3>Bluetooth keyboard mode</h3><p>Optional mode that sends text as a paired Bluetooth keyboard — confirmed working in YouTube.</p></div>
+          <div class="card"><span class="ic">🎙️</span><h3>Voice search</h3><p>Experimental voice search that streams your Linux microphone into a Google TV voice session.</p></div>
+          <div class="card"><span class="ic">📌</span><h3>App shortcuts</h3><p>Editable and removable app shortcut buttons in a popover, so your favorite apps are one click away.</p></div>
+          <div class="card"><span class="ic">🗂️</span><h3>Tray &amp; Cinnamon applet</h3><p>Run minimized in the system tray or add the optional Cinnamon applet for quick access.</p></div>
+          <div class="card"><span class="ic">⚙️</span><h3>Settings &amp; help</h3><p>Built-in settings and help pages, including microphone selection and text-input guidance.</p></div>
+          <div class="card"><span class="ic">🔒</span><h3>Local &amp; private</h3><p>Pairing data stays on your machine in <code>~/.config/tellykeys/</code>. No cloud account required.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="distros">
+      <div class="wrap">
+        <h2>Works on Linux Mint, Ubuntu, and Fedora</h2>
+        <p class="sub">The Linux Mint / Cinnamon experience is the primary target today, with Fedora/RPM and Flatpak packaging being added next.</p>
+        <div class="pills">
+          <span class="pill"><b>✓</b> Linux Mint</span>
+          <span class="pill"><b>✓</b> Ubuntu</span>
+          <span class="pill"><b>✓</b> Fedora (from source)</span>
+          <span class="pill"><b>✓</b> Cinnamon applet</span>
+          <span class="pill">Flatpak — coming soon</span>
+          <span class="pill">macOS / Windows — planned</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="download">
+      <div class="wrap">
+        <h2>Download</h2>
+        <p class="sub">Packages are attached to GitHub Releases as they are built.</p>
+        <table class="dl">
+          <tr><th>Platform</th><th>Package</th><th>Status</th></tr>
+          <tr>
+            <td>Linux Mint / Ubuntu</td>
+            <td><a href="https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/tellykeys_0.1.0_all.deb"><code>tellykeys_0.1.0_all.deb</code></a></td>
+            <td><span class="badge ok">Available</span></td>
+          </tr>
+          <tr>
+            <td>Fedora / RPM distros</td>
+            <td><code>tellykeys-0.1.0-1.noarch.rpm</code></td>
+            <td><span class="badge soon">Coming soon</span></td>
+          </tr>
+          <tr>
+            <td>Cross-distro Linux</td>
+            <td><code>org.gaimsdevsoftware.TellyKeys.flatpak</code></td>
+            <td><span class="badge soon">Coming soon</span></td>
+          </tr>
+        </table>
+
+        <h3 style="margin-top: 32px;">Install from source</h3>
+        <pre><code>git clone https://github.com/GaimsDevSoftware/tellykeys.git
+cd tellykeys
+python3 -m venv --system-site-packages .venv
+. .venv/bin/activate
+python -m pip install -e .
+tellykeys</code></pre>
+        <p style="color: var(--muted); margin-top: 18px;"><b style="color:var(--text)">Linux Mint dependencies:</b></p>
+        <pre><code>sudo apt install python3-gi gir1.2-gtk-3.0 avahi-utils pipewire-bin pulseaudio-utils</code></pre>
+        <p style="color: var(--muted);"><b style="color:var(--text)">Fedora dependencies:</b></p>
+        <pre><code>sudo dnf install python3-gobject gtk3 avahi-tools pipewire-utils pulseaudio-utils</code></pre>
+      </div>
+    </section>
+
+    <section id="text-input">
+      <div class="wrap">
+        <h2>Text input for Google TV &amp; YouTube</h2>
+        <p class="sub">Typing on Google TV is hard because every app behaves differently. TellyKeys tries several strategies so text actually lands.</p>
+        <div class="grid">
+          <div class="card"><h3>YouTube</h3><p>Opens a YouTube search URL directly when YouTube is the active app.</p></div>
+          <div class="card"><h3>Bluetooth keyboard</h3><p>Sends text as a paired Bluetooth keyboard for apps that reject remote text input.</p></div>
+          <div class="card"><h3>ADB fallback</h3><p>Optional fallback when developer / network debugging is enabled on the TV.</p></div>
+          <div class="card"><h3>Remote IME</h3><p>Uses the Google TV remote text protocol as a final fallback.</p></div>
+        </div>
+        <p style="color: var(--muted); margin-top: 20px;">If text does not appear, open <code>Options &gt; Text &gt; Text input help</code> inside the app.</p>
+      </div>
+    </section>
+
+    <section id="voice">
+      <div class="wrap">
+        <h2>Voice search</h2>
+        <p class="sub">Experimental, but working on the protocol side.</p>
+        <p style="color: var(--muted); max-width: 70ch;">TellyKeys opens a Google TV voice session and streams microphone audio as 16-bit PCM, mono, 8000 Hz. On PipeWire systems it prefers <code>pw-record</code>, falling back to <code>parec</code>. If the TV opens voice search but does not hear you, open <code>Options &gt; Text</code>, select the real microphone source (not a monitor source), press <code>Test mic</code>, then try again. Voice search auto-stops after 3 seconds of silence following speech, or 8 seconds if no speech is heard.</p>
+      </div>
+    </section>
+
+    <section id="faq">
+      <div class="wrap">
+        <h2>FAQ</h2>
+        <p class="sub">Common questions about running a Google TV remote on Linux.</p>
+        <details open>
+          <summary>Does TellyKeys work as a Google TV remote on Linux?</summary>
+          <p>Yes. It controls Google TV and Android TV over your local network using the Android TV Remote Protocol v2 — the same family of protocol used by the official Google TV mobile app. No ADB is required for normal pairing and remote control.</p>
+        </details>
+        <details>
+          <summary>Which Linux distributions are supported?</summary>
+          <p>Linux Mint and Ubuntu are the primary targets, with a <code>.deb</code> package available. Fedora and other RPM distributions work from source, with RPM and Flatpak packages being added. macOS and Windows ports are planned later.</p>
+        </details>
+        <details>
+          <summary>Can I send text to Google TV from Linux?</summary>
+          <p>Yes. Because Google TV apps handle text differently, TellyKeys uses several strategies: a direct YouTube search when YouTube is active, an optional Bluetooth keyboard mode, an optional ADB fallback, and the remote IME protocol.</p>
+        </details>
+        <details>
+          <summary>Do I need ADB or developer mode?</summary>
+          <p>No. ADB is optional and only used as a fallback for some text input and system settings shortcuts. Normal pairing and remote control work without it.</p>
+        </details>
+        <details>
+          <summary>Is voice search reliable?</summary>
+          <p>It is experimental. It depends on your TV supporting third-party remote voice sessions, and on selecting a real microphone source in the app's settings.</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="limits">
+      <div class="wrap">
+        <h2>Known limitations</h2>
+        <p class="sub">Honest about the rough edges — TellyKeys is under active development.</p>
+        <ul class="limits">
+          <li>Bluetooth keyboard mode may require BlueZ configuration on some systems.</li>
+          <li>Voice search depends on TV support for third-party remote voice sessions.</li>
+          <li>App-specific text input varies by Google TV app.</li>
+          <li>RPM and Flatpak packages are still being built; install from source on those platforms for now.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div>TellyKeys — a Google TV &amp; Android TV remote for Linux. Built by GaimsDevSoftware.</div>
+      <div>
+        <a href="https://github.com/GaimsDevSoftware/tellykeys">GitHub</a> ·
+        <a href="https://github.com/GaimsDevSoftware/tellykeys/releases/latest">Releases</a> ·
+        <a href="llms.txt">llms.txt</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
