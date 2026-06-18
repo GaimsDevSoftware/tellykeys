@@ -29,7 +29,7 @@ class Settings:
     buttons: list["ShortcutButton"] = field(default_factory=list)
     app_buttons: list["ShortcutButton"] = field(default_factory=list)
     app_buttons_configured: bool = False
-    bluetooth_keyboard_enabled: bool = False
+    shows: list["ShortcutButton"] = field(default_factory=list)
     microphone_source: str = ""
 
 
@@ -71,6 +71,14 @@ def load_settings() -> Settings:
             if label and target:
                 app_buttons.append(ShortcutButton(label, target))
 
+    shows = []
+    for item in data.get("shows", []):
+        if isinstance(item, dict) and isinstance(item.get("label"), str) and isinstance(item.get("target"), str):
+            label = item["label"].strip()
+            target = item["target"].strip()
+            if label and target:
+                shows.append(ShortcutButton(label, target))
+
     last_host = data.get("last_host")
     return Settings(
         last_host=last_host if isinstance(last_host, str) else "",
@@ -78,7 +86,7 @@ def load_settings() -> Settings:
         buttons=buttons,
         app_buttons=app_buttons,
         app_buttons_configured=app_buttons_configured,
-        bluetooth_keyboard_enabled=bool(data.get("bluetooth_keyboard_enabled", False)),
+        shows=shows,
         microphone_source=data["microphone_source"].strip() if isinstance(data.get("microphone_source"), str) else "",
     )
 
@@ -91,7 +99,7 @@ def save_settings(settings: Settings) -> None:
         "buttons": [{"label": button.label, "target": button.target} for button in settings.buttons],
         "app_buttons": [{"label": button.label, "target": button.target} for button in settings.app_buttons],
         "app_buttons_configured": settings.app_buttons_configured,
-        "bluetooth_keyboard_enabled": settings.bluetooth_keyboard_enabled,
+        "shows": [{"label": button.label, "target": button.target} for button in settings.shows],
         "microphone_source": settings.microphone_source,
     }
     SETTINGS_FILE.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
@@ -110,7 +118,7 @@ def remember_device(settings: Settings, host: str, label: str | None = None) -> 
         buttons=settings.buttons,
         app_buttons=settings.app_buttons,
         app_buttons_configured=settings.app_buttons_configured,
-        bluetooth_keyboard_enabled=settings.bluetooth_keyboard_enabled,
+        shows=settings.shows,
         microphone_source=settings.microphone_source,
     )
 
@@ -128,7 +136,7 @@ def forget_device(settings: Settings, host: str) -> Settings:
         buttons=settings.buttons,
         app_buttons=settings.app_buttons,
         app_buttons_configured=settings.app_buttons_configured,
-        bluetooth_keyboard_enabled=settings.bluetooth_keyboard_enabled,
+        shows=settings.shows,
         microphone_source=settings.microphone_source,
     )
 
@@ -147,7 +155,7 @@ def add_button(settings: Settings, label: str, target: str) -> Settings:
         buttons=buttons[:12],
         app_buttons=settings.app_buttons,
         app_buttons_configured=settings.app_buttons_configured,
-        bluetooth_keyboard_enabled=settings.bluetooth_keyboard_enabled,
+        shows=settings.shows,
         microphone_source=settings.microphone_source,
     )
 
@@ -160,7 +168,7 @@ def remove_button(settings: Settings, label: str) -> Settings:
         buttons=buttons,
         app_buttons=settings.app_buttons,
         app_buttons_configured=settings.app_buttons_configured,
-        bluetooth_keyboard_enabled=settings.bluetooth_keyboard_enabled,
+        shows=settings.shows,
         microphone_source=settings.microphone_source,
     )
 
@@ -172,19 +180,19 @@ def set_app_buttons(settings: Settings, buttons: list[ShortcutButton]) -> Settin
         buttons=settings.buttons,
         app_buttons=buttons[:18],
         app_buttons_configured=True,
-        bluetooth_keyboard_enabled=settings.bluetooth_keyboard_enabled,
+        shows=settings.shows,
         microphone_source=settings.microphone_source,
     )
 
 
-def set_bluetooth_keyboard_enabled(settings: Settings, enabled: bool) -> Settings:
+def set_shows(settings: Settings, shows: list[ShortcutButton]) -> Settings:
     return Settings(
         last_host=settings.last_host,
         devices=settings.devices,
         buttons=settings.buttons,
         app_buttons=settings.app_buttons,
         app_buttons_configured=settings.app_buttons_configured,
-        bluetooth_keyboard_enabled=enabled,
+        shows=shows[:24],
         microphone_source=settings.microphone_source,
     )
 
@@ -196,7 +204,7 @@ def set_microphone_source(settings: Settings, source: str) -> Settings:
         buttons=settings.buttons,
         app_buttons=settings.app_buttons,
         app_buttons_configured=settings.app_buttons_configured,
-        bluetooth_keyboard_enabled=settings.bluetooth_keyboard_enabled,
+        shows=settings.shows,
         microphone_source=source.strip(),
     )
 

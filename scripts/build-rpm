@@ -31,12 +31,11 @@ fi
 
 rm -rf "$RPMROOT" "$PAYLOAD"
 mkdir -p "$RPMROOT/BUILD" "$RPMROOT/RPMS" "$RPMROOT/SOURCES" "$RPMROOT/SPECS" "$RPMROOT/SRPMS"
-mkdir -p "$PAYLOAD/opt/tellykeys/lib" "$PAYLOAD/opt/tellykeys/scripts" "$PAYLOAD/usr/bin" "$PAYLOAD/usr/share/applications" "$PAYLOAD/usr/share/icons/hicolor/scalable/apps" "$PAYLOAD/usr/share/doc/tellykeys"
+mkdir -p "$PAYLOAD/opt/tellykeys/lib" "$PAYLOAD/usr/bin" "$PAYLOAD/usr/share/applications" "$PAYLOAD/usr/share/icons/hicolor/scalable/apps" "$PAYLOAD/usr/share/doc/tellykeys"
 
 cp -a "$ROOT/src/tellykeys" "$PAYLOAD/opt/tellykeys/lib/"
 cp -a "$SITE/androidtvremote2" "$PAYLOAD/opt/tellykeys/lib/"
 cp -a "$SITE/aiofiles" "$PAYLOAD/opt/tellykeys/lib/"
-cp -a "$ROOT/scripts/tellykeys-bluetooth-keyboard-helper" "$ROOT/scripts/tellykeys-bluetooth-system-fix" "$ROOT/scripts/tellykeys-bluetooth-system-unfix" "$PAYLOAD/opt/tellykeys/scripts/"
 cp "$ROOT/packaging/linux/tellykeys.desktop" "$PAYLOAD/usr/share/applications/"
 cp "$ROOT/packaging/linux/tellykeys-tray.desktop" "$PAYLOAD/usr/share/applications/"
 cp "$ROOT/assets/tellykeys.svg" "$PAYLOAD/usr/share/icons/hicolor/scalable/apps/tellykeys.svg"
@@ -48,7 +47,6 @@ export PYTHONPATH="/opt/tellykeys/lib${PYTHONPATH:+:$PYTHONPATH}"
 exec python3 -m tellykeys.app "$@"
 EOF
 chmod 0755 "$PAYLOAD/usr/bin/tellykeys"
-chmod 0755 "$PAYLOAD/opt/tellykeys/scripts/"*
 
 tar -C "$PAYLOAD" -czf "$RPMROOT/SOURCES/tellykeys-${VERSION}.tar.gz" .
 
@@ -68,13 +66,10 @@ Requires: python3-cryptography
 Requires: python3-protobuf
 Requires: pipewire-utils
 Recommends: android-tools
-Recommends: bluez
-Recommends: polkit
 
 %description
 TellyKeys is a GTK desktop remote for Google TV and Android TV with pairing,
-D-pad controls, app shortcuts, text input, optional Bluetooth keyboard mode,
-and experimental voice search.
+D-pad controls, app shortcuts, text input, and experimental voice search.
 
 %prep
 %setup -q -c

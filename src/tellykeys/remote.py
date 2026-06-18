@@ -5,6 +5,7 @@ import contextlib
 import os
 import shutil
 import subprocess
+import time
 from array import array
 from concurrent.futures import Future
 from dataclasses import dataclass
@@ -13,9 +14,9 @@ from typing import Callable
 from urllib.parse import quote_plus
 
 from androidtvremote2 import AndroidTVRemote, CannotConnect, ConnectionClosed, InvalidAuth
+from google.protobuf.message import DecodeError
 
-from . import bluetooth_hid
-
+from androidtvremote2.remotemessage_pb2 import RemoteMessage
 
 APP_NAME = "TellyKeys"
 CONFIG_DIR = Path.home() / ".config" / "tellykeys" / "devices"
@@ -42,21 +43,21 @@ class TextInputDiagnostics:
     ime_counter: int | None
     ime_field_counter: int | None
     current_app: str | None
-    bluetooth_enabled: bool
-    bluetooth_helper_running: bool
-    bluetooth_keyboard_connected: bool
-    bluetooth_system_fix_installed: bool
 
 
 @dataclass(frozen=True)
-class BluetoothKeyboardSetup:
-    ok: bool
-    message: str
-    helper_running: bool
-    keyboard_connected: bool
-    controller_powered: bool | None
-    peripheral_role: bool | None
-    system_fix_installed: bool
+class TextFieldState:
+    value: str
+    start: int | None
+    end: int | None
+    label: str | None
+    current_app: str | None
+
+
+@dataclass(frozen=True)
+class TextSendResult:
+    method: str | None
+    attempts: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -65,20 +66,18 @@ class MicrophoneSource:
     description: str
 
 
-class BluetoothKeyboardNotConnected(RuntimeError):
-    pass
-
-
 class TellyKeysRemote:
     def __init__(self) -> None:
         self._remote: AndroidTVRemote | None = None
         self.host: str | None = None
         self._status_callback: Callable[[TvStatus], None] | None = None
         self._voice_status_callback: Callable[[str, bool], None] | None = None
-        self.bluetooth_keyboard_enabled = False
+        self._text_field_callback: Callable[[TextFieldState], None] | None = None
         self._voice_task: asyncio.Task | None = None
         self._voice_process: asyncio.subprocess.Process | None = None
         self._voice_stream = None
+        self._last_text_field: TextFieldState | None = None
+        self._last_text_field_seen_at = 0.0
         self.microphone_source = ""
 
     def set_status_callback(self, callback: Callable[[TvStatus], None]) -> None:
@@ -87,8 +86,8 @@ class TellyKeysRemote:
     def set_voice_status_callback(self, callback: Callable[[str, bool], None]) -> None:
         self._voice_status_callback = callback
 
-    def set_bluetooth_keyboard_enabled(self, enabled: bool) -> None:
-        self.bluetooth_keyboard_enabled = enabled
+    def set_text_field_callback(self, callback: Callable[[TextFieldState], None]) -> None:
+        self._text_field_callback = callback
 
     def set_microphone_source(self, source: str) -> None:
         self.microphone_source = source.strip()
@@ -181,31 +180,48 @@ class TellyKeysRemote:
     def key(self, key_code: str) -> None:
         self._require_remote().send_key_command(key_code)
 
-    def text(self, text: str) -> str | None:
-        if text:
-            if self.bluetooth_keyboard_enabled:
-                if bluetooth_hid.send_text(text):
-                    return "bluetooth_keyboard"
-                diagnostics = bluetooth_hid.diagnostics()
-                if not diagnostics.helper_running:
-                    raise BluetoothKeyboardNotConnected("Set up Bluetooth keyboard first.")
-                if diagnostics.helper_running and not diagnostics.keyboard_connected:
-                    raise BluetoothKeyboardNotConnected("Pair TellyKeys Keyboard from the TV's Bluetooth menu first.")
-            if self._send_contextual_search(text):
-                return "youtube_search"
+    def delete_text(self, count: int = 1) -> str:
+        count = max(1, count)
+        if self._send_key_with_adb("KEYCODE_DEL", count=count):
+            return "adb"
+        self._send_remote_key_repeated("DEL", count)
+        return "remote_key"
+
+    def clear_text(self) -> str:
+        state = self._last_text_field if self._has_recent_text_field() else None
+        delete_count = len(state.value) if state and state.value else 1
+        return self.delete_text(delete_count)
+
+    def text(self, text: str) -> TextSendResult:
+        attempts: list[str] = []
+        if not text:
+            return TextSendResult(method=None, attempts=())
+
+        if self._has_recent_text_field():
+            attempts.append("adb")
             if self._send_text_with_adb(text):
-                return "adb"
+                return TextSendResult(method="adb", attempts=tuple(attempts))
+            attempts.append("remote_ime")
             self._require_remote().send_text(text)
-            return "remote_ime"
-        return None
+            return TextSendResult(method="remote_ime", attempts=tuple(attempts))
+
+        attempts.append("youtube_search")
+        if self._send_contextual_search(text):
+            return TextSendResult(method="youtube_search", attempts=tuple(attempts))
+
+        attempts.append("adb")
+        if self._send_text_with_adb(text):
+            return TextSendResult(method="adb", attempts=tuple(attempts))
+
+        attempts.append("remote_ime")
+        self._require_remote().send_text(text)
+        return TextSendResult(method="remote_ime", attempts=tuple(attempts))
 
     def text_diagnostics(self) -> TextInputDiagnostics:
         remote = self._require_remote()
         protocol = getattr(remote, "_remote_message_protocol", None)
         adb_installed = shutil.which("adb") is not None
         adb_authorized = self._is_adb_authorized() if adb_installed and self.host else None
-        bluetooth_diagnostics = bluetooth_hid.diagnostics()
-
         return TextInputDiagnostics(
             adb_installed=adb_installed,
             adb_authorized=adb_authorized,
@@ -213,18 +229,6 @@ class TellyKeysRemote:
             ime_counter=getattr(protocol, "ime_counter", None),
             ime_field_counter=getattr(protocol, "ime_field_counter", None),
             current_app=remote.current_app,
-            bluetooth_enabled=self.bluetooth_keyboard_enabled,
-            bluetooth_helper_running=bluetooth_diagnostics.helper_running,
-            bluetooth_keyboard_connected=bluetooth_diagnostics.keyboard_connected,
-            bluetooth_system_fix_installed=bluetooth_diagnostics.system_fix_installed,
-        )
-
-    def bluetooth_text_status(self) -> tuple[bool, bool, bool]:
-        diagnostics = bluetooth_hid.diagnostics()
-        return (
-            self.bluetooth_keyboard_enabled,
-            diagnostics.helper_running,
-            diagnostics.keyboard_connected,
         )
 
     def open_tv_keyboard_settings(self) -> bool:
@@ -264,31 +268,6 @@ class TellyKeysRemote:
 
         self.key("SETTINGS")
         return "key"
-
-    def prepare_bluetooth_keyboard(self) -> BluetoothKeyboardSetup:
-        result = bluetooth_hid.prepare()
-        return BluetoothKeyboardSetup(
-            ok=result.ok,
-            message=result.message,
-            helper_running=result.diagnostics.helper_running,
-            keyboard_connected=result.diagnostics.keyboard_connected,
-            controller_powered=result.diagnostics.controller_powered,
-            peripheral_role=result.diagnostics.peripheral_role,
-            system_fix_installed=result.diagnostics.system_fix_installed,
-        )
-
-    def reset_bluetooth_keyboard(self, remove_system_fix: bool = False) -> BluetoothKeyboardSetup:
-        result = bluetooth_hid.reset(remove_system_fix=remove_system_fix)
-        self.bluetooth_keyboard_enabled = False
-        return BluetoothKeyboardSetup(
-            ok=result.ok,
-            message=result.message,
-            helper_running=result.diagnostics.helper_running,
-            keyboard_connected=result.diagnostics.keyboard_connected,
-            controller_powered=result.diagnostics.controller_powered,
-            peripheral_role=result.diagnostics.peripheral_role,
-            system_fix_installed=result.diagnostics.system_fix_installed,
-        )
 
     def launch(self, app_id_or_url: str) -> None:
         self._require_remote().send_launch_app_command(app_id_or_url)
@@ -425,6 +404,54 @@ class TellyKeysRemote:
         remote.add_current_app_updated_callback(emit)
         remote.add_is_on_updated_callback(emit)
         remote.add_volume_info_updated_callback(emit)
+        self._install_text_field_observer(remote)
+
+    def _install_text_field_observer(self, remote: AndroidTVRemote) -> None:
+        protocol = getattr(remote, "_remote_message_protocol", None)
+        if not protocol or getattr(protocol, "_tellykeys_text_observer", False):
+            return
+
+        original_handle_message = protocol._handle_message
+
+        def handle_message(raw_msg: bytes) -> None:
+            try:
+                msg = RemoteMessage()
+                msg.ParseFromString(raw_msg)
+            except DecodeError:
+                msg = None
+            original_handle_message(raw_msg)
+            if msg is not None:
+                self._observe_text_field_message(msg)
+
+        protocol._handle_message = handle_message
+        protocol._tellykeys_text_observer = True
+
+    def _observe_text_field_message(self, msg: RemoteMessage) -> None:
+        status = None
+        current_app = None
+        if msg.HasField("remote_ime_show_request"):
+            status = msg.remote_ime_show_request.remote_text_field_status
+        elif msg.HasField("remote_ime_key_inject"):
+            status = msg.remote_ime_key_inject.text_field_status
+            current_app = msg.remote_ime_key_inject.app_info.app_package or None
+
+        if not status:
+            return
+
+        state = TextFieldState(
+            value=status.value,
+            start=status.start,
+            end=status.end,
+            label=status.label or None,
+            current_app=current_app,
+        )
+        self._last_text_field = state
+        self._last_text_field_seen_at = time.monotonic()
+        if self._text_field_callback:
+            self._text_field_callback(state)
+
+    def _has_recent_text_field(self) -> bool:
+        return self._last_text_field is not None and time.monotonic() - self._last_text_field_seen_at < 30
 
     def _require_remote(self) -> AndroidTVRemote:
         if not self._remote:
@@ -454,6 +481,36 @@ class TellyKeysRemote:
             return result.returncode == 0
         except (OSError, subprocess.TimeoutExpired):
             return False
+
+    def _send_key_with_adb(self, key_code: str, count: int = 1) -> bool:
+        adb = shutil.which("adb")
+        if not adb or not self.host:
+            return False
+
+        target = f"{self.host}:5555"
+        try:
+            if not self._is_adb_authorized():
+                subprocess.run([adb, "connect", target], check=False, capture_output=True, text=True, timeout=4)
+            if not self._is_adb_authorized():
+                return False
+
+            for _ in range(count):
+                result = subprocess.run(
+                    [adb, "-s", target, "shell", "input", "keyevent", key_code],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=4,
+                )
+                if result.returncode != 0:
+                    return False
+            return True
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+
+    def _send_remote_key_repeated(self, key_code: str, count: int) -> None:
+        for _ in range(count):
+            self.key(key_code)
 
     def _send_contextual_search(self, text: str) -> bool:
         remote = self._require_remote()

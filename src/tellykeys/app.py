@@ -7,6 +7,7 @@ import threading
 import warnings
 from concurrent.futures import Future
 from typing import Callable
+from urllib.parse import quote_plus
 
 import gi
 
@@ -19,10 +20,10 @@ from androidtvremote2 import CannotConnect, ConnectionClosed, InvalidAuth
 from .discovery import discover_android_tvs
 from .remote import (
     AsyncRunner,
-    BluetoothKeyboardNotConnected,
-    BluetoothKeyboardSetup,
     TellyKeysRemote,
+    TextFieldState,
     TextInputDiagnostics,
+    TextSendResult,
     TvStatus,
 )
 from .settings import (
@@ -34,8 +35,8 @@ from .settings import (
     reset_all,
     save_settings,
     set_app_buttons,
-    set_bluetooth_keyboard_enabled,
     set_microphone_source,
+    set_shows,
 )
 
 
@@ -47,6 +48,19 @@ warnings.filterwarnings(
 
 PAIRING_CODE_LENGTH = 6
 DEFAULT_MICROPHONE_ID = "__default__"
+
+# Apps you can save a favorite show for. Each entry is
+# (display name, launch target when no link is given, search-deep-link template).
+# A search template means "type a show name -> open the app's search for it".
+# When it is None the app has no public search deep link, so a plain name can
+# only open the app itself; paste the show's link to open it directly.
+SHOW_APPS: list[tuple[str, str, str | None]] = [
+    ("YouTube", "https://www.youtube.com", "https://www.youtube.com/results?search_query={q}"),
+    ("Netflix", "com.netflix.ninja", "https://www.netflix.com/search?q={q}"),
+    ("Disney+", "com.disney.disneyplus", None),
+    ("Prime Video", "com.amazon.amazonvideo.livingroom", None),
+    ("HBO Max", "https://play.hbomax.com", None),
+]
 
 
 class PairingCodeInput(Gtk.Box):
@@ -153,10 +167,10 @@ class TellyKeysWindow(Gtk.Window):
         self.use_tray = use_tray
         self.tray_icon: Gtk.StatusIcon | None = None
         self.remote = TellyKeysRemote()
-        self.remote.set_bluetooth_keyboard_enabled(self.settings.bluetooth_keyboard_enabled)
         self.remote.set_microphone_source(self.settings.microphone_source)
         self.remote.set_status_callback(lambda status: GLib.idle_add(self.show_tv_status, status))
         self.remote.set_voice_status_callback(lambda message, active: GLib.idle_add(self.show_voice_status, message, active))
+        self.remote.set_text_field_callback(lambda state: GLib.idle_add(self.show_text_field_state, state))
         self.runner = AsyncRunner()
         self.loop_thread = threading.Thread(target=self._run_loop, daemon=True)
         self.loop_thread.start()
@@ -228,6 +242,7 @@ class TellyKeysWindow(Gtk.Window):
         self.remote_panel.pack_start(self._build_media(), False, False, 0)
         self.remote_panel.pack_start(self._build_text_box(), False, False, 0)
         self.remote_panel.pack_start(self._build_action_row(), False, False, 0)
+        self.remote_panel.pack_start(self._build_shows_menu(), False, False, 0)
         self.remote_panel.hide()
 
         nav_row = Gtk.Box(spacing=8)
@@ -321,11 +336,6 @@ class TellyKeysWindow(Gtk.Window):
         keyboard_settings_button.connect("clicked", self.on_open_tv_keyboard_settings)
         text_help_row.pack_start(keyboard_settings_button, True, True, 0)
 
-        self.bluetooth_keyboard_check = Gtk.CheckButton(label="Use Bluetooth keyboard for text")
-        self.bluetooth_keyboard_check.set_active(self.settings.bluetooth_keyboard_enabled)
-        self.bluetooth_keyboard_check.connect("toggled", self.on_bluetooth_keyboard_toggled)
-        text_box.pack_start(self.bluetooth_keyboard_check, False, False, 0)
-
         microphone_label = Gtk.Label(label="Microphone for voice search", xalign=0)
         microphone_label.get_style_context().add_class("section-label")
         text_box.pack_start(microphone_label, False, False, 0)
@@ -346,13 +356,6 @@ class TellyKeysWindow(Gtk.Window):
         self.microphone_status_label.get_style_context().add_class("hint")
         text_box.pack_start(self.microphone_status_label, False, False, 0)
         self.refresh_microphone_combo()
-
-        setup_bluetooth_button = Gtk.Button(label="Set up Bluetooth keyboard")
-        setup_bluetooth_button.connect("clicked", self.on_setup_bluetooth_keyboard)
-        text_box.pack_start(setup_bluetooth_button, False, False, 0)
-        reset_bluetooth_button = Gtk.Button(label="Reset Bluetooth keyboard")
-        reset_bluetooth_button.connect("clicked", self.on_reset_bluetooth_keyboard)
-        text_box.pack_start(reset_bluetooth_button, False, False, 0)
 
         button_settings_label = Gtk.Label(label="Apps buttons", xalign=0)
         button_settings_label.get_style_context().add_class("section-label")
@@ -388,6 +391,48 @@ class TellyKeysWindow(Gtk.Window):
         restore_defaults_button.connect("clicked", self.on_restore_default_app_buttons)
         buttons_box.pack_start(restore_defaults_button, False, False, 0)
 
+        shows_label = Gtk.Label(label="Shows", xalign=0)
+        shows_label.get_style_context().add_class("section-label")
+        buttons_box.pack_start(shows_label, False, False, 0)
+
+        shows_hint = Gtk.Label(
+            label="Pick an app, name the show, and tap Save. To open a show directly, paste its link (e.g. netflix.com/title/…); otherwise the name opens the app's search.",
+            xalign=0,
+        )
+        shows_hint.get_style_context().add_class("hint")
+        shows_hint.set_line_wrap(True)
+        buttons_box.pack_start(shows_hint, False, False, 0)
+
+        self.show_app_combo = Gtk.ComboBoxText()
+        for app_label, _base, _search in SHOW_APPS:
+            self.show_app_combo.append(app_label, app_label)
+        self.show_app_combo.set_active(0)
+        buttons_box.pack_start(self.show_app_combo, False, False, 0)
+
+        show_row = Gtk.Box(spacing=8)
+        buttons_box.pack_start(show_row, False, False, 0)
+        self.show_name_entry = Gtk.Entry()
+        self.show_name_entry.set_placeholder_text("Show name")
+        self.show_name_entry.connect("activate", self.on_add_show)
+        show_row.pack_start(self.show_name_entry, True, True, 0)
+        self.show_link_entry = Gtk.Entry()
+        self.show_link_entry.set_placeholder_text("Paste link (optional)")
+        self.show_link_entry.connect("activate", self.on_add_show)
+        show_row.pack_start(self.show_link_entry, True, True, 0)
+
+        self.show_combo = Gtk.ComboBoxText()
+        self._refresh_show_combo()
+        buttons_box.pack_start(self.show_combo, False, False, 0)
+
+        show_actions = Gtk.Box(spacing=8)
+        buttons_box.pack_start(show_actions, False, False, 0)
+        add_show_button = Gtk.Button(label="Save show")
+        add_show_button.connect("clicked", self.on_add_show)
+        show_actions.pack_start(add_show_button, True, True, 0)
+        remove_show_button = Gtk.Button(label="Delete show")
+        remove_show_button.connect("clicked", self.on_remove_show)
+        show_actions.pack_start(remove_show_button, True, True, 0)
+
         system_label = Gtk.Label(label="Reset", xalign=0)
         system_label.get_style_context().add_class("section-label")
         system_box.pack_start(system_label, False, False, 0)
@@ -415,7 +460,6 @@ class TellyKeysWindow(Gtk.Window):
             self.show_demo_state()
         else:
             GLib.timeout_add(350, self.start_auto_setup)
-        GLib.timeout_add_seconds(3, self.refresh_bluetooth_text_status)
         self.schedule_window_fit()
 
     def _install_css(self) -> None:
@@ -477,6 +521,9 @@ class TellyKeysWindow(Gtk.Window):
             .subtitle.compact { font-size: 12px; }
             .section-label { font-size: 14px; font-weight: 700; color: #667085; }
             .hint { font-size: 12px; color: #667085; }
+            .success { color: #067647; font-weight: 700; }
+            .warning { color: #b54708; font-weight: 700; }
+            .error { color: #b42318; font-weight: 700; }
             .status-card {
               background: #ffffff;
               border: 1px solid #d8dee8;
@@ -735,8 +782,8 @@ class TellyKeysWindow(Gtk.Window):
             (
                 "input-keyboard-symbolic",
                 "Send text",
-                "Type into Send text to TV. TellyKeys picks the best available method: Bluetooth keyboard, YouTube search link, ADB, or Google TV text input.",
-                "overview text keyboard bluetooth youtube adb search input",
+                "Type into Send text to TV. TellyKeys picks the best available method: YouTube search link, ADB, or Google TV text input.",
+                "overview text keyboard youtube adb search input",
             ),
             (
                 "audio-input-microphone-symbolic",
@@ -751,6 +798,12 @@ class TellyKeysWindow(Gtk.Window):
                 "overview apps shortcuts buttons edit remove replace restore youtube netflix prime disney kodi launch",
             ),
             (
+                "starred-symbolic",
+                "Favorite shows",
+                "Use Shows on the remote to jump straight to a saved show. Add one in Settings > Buttons: pick the app, name the show, and tap Save. Paste the show's link (e.g. netflix.com/title/…) to open it directly; otherwise the name opens the app's search.",
+                "overview shows favorite favourite netflix youtube disney prime title deep link search gabby add buttons launch",
+            ),
+            (
                 "preferences-system-symbolic",
                 "Settings",
                 "Settings has pages for TV setup, text/keyboard, app buttons, and reset tools. Use it only when you need to change something.",
@@ -759,8 +812,8 @@ class TellyKeysWindow(Gtk.Window):
             (
                 "dialog-warning-symbolic",
                 "When something does not work",
-                "Open Settings > Text > Text input help for diagnostics. For Bluetooth text, make sure TellyKeys Keyboard is paired with the TV.",
-                "troubleshooting diagnostics help bluetooth pair text sony bravia",
+                "Open Settings > Text > Text input help for diagnostics. Some TV apps do not accept remote text input unless ADB is available.",
+                "troubleshooting diagnostics help text sony bravia adb",
             ),
         ]:
             card = self._help_card(icon, title_text, body)
@@ -888,8 +941,17 @@ class TellyKeysWindow(Gtk.Window):
         row = Gtk.Box(spacing=8)
         self.text_entry = Gtk.Entry()
         self.text_entry.set_placeholder_text("Send text to TV")
+        self.text_entry.connect("key-press-event", self.on_text_entry_key_press)
         self.text_entry.connect("activate", self.on_send_text)
         row.pack_start(self.text_entry, True, True, 0)
+        delete_button = Gtk.Button(label="⌫")
+        delete_button.set_tooltip_text("Delete one character on the TV")
+        delete_button.connect("clicked", self.on_delete_text)
+        row.pack_start(delete_button, False, False, 0)
+        clear_button = Gtk.Button(label="Clear")
+        clear_button.set_tooltip_text("Clear the detected TV text field")
+        clear_button.connect("clicked", self.on_clear_text)
+        row.pack_start(clear_button, False, False, 0)
         button = Gtk.Button(label="Send")
         button.connect("clicked", self.on_send_text)
         row.pack_start(button, False, False, 0)
@@ -905,6 +967,13 @@ class TellyKeysWindow(Gtk.Window):
         self.voice_button.get_style_context().add_class("remote-button")
         self.voice_button.connect("clicked", self.on_voice_search)
         row.pack_start(self.voice_button, True, True, 0)
+        
+        # Power button — readily accessible on main screen
+        self.power_main_button = Gtk.Button(label="Power")
+        self.power_main_button.get_style_context().add_class("remote-button")
+        self.power_main_button.connect("clicked", lambda *_: self.send_key("POWER"))
+        row.pack_start(self.power_main_button, True, True, 0)
+        
         self.apps_row = self._build_apps_menu()
         row.pack_start(self.apps_row, True, True, 0)
         return row
@@ -919,6 +988,60 @@ class TellyKeysWindow(Gtk.Window):
         self.rebuild_shortcuts()
         row.pack_start(self.apps_button, True, True, 0)
         return row
+
+    def _build_shows_menu(self) -> Gtk.Box:
+        row = Gtk.Box(spacing=8)
+        self.shows_button = Gtk.MenuButton(label="Shows")
+        self.shows_button.get_style_context().add_class("remote-button")
+        self.shows_popover = Gtk.Popover.new(self.shows_button)
+        self.shows_popover.set_position(Gtk.PositionType.TOP)
+        self.shows_button.set_popover(self.shows_popover)
+        self.rebuild_shows()
+        row.pack_start(self.shows_button, True, True, 0)
+        return row
+
+    def saved_shows(self) -> list[tuple[str, str]]:
+        return [(button.label, button.target) for button in self.settings.shows]
+
+    def rebuild_shows(self, keep_open: bool = False) -> None:
+        if not hasattr(self, "shows_popover"):
+            return
+        child = self.shows_popover.get_child()
+        if child:
+            self.shows_popover.remove(child)
+        popover_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        popover_box.get_style_context().add_class("settings-panel")
+
+        title = Gtk.Label(label="Shows", xalign=0)
+        title.get_style_context().add_class("section-label")
+        popover_box.pack_start(title, False, False, 0)
+
+        shows = self.saved_shows()
+        if shows:
+            grid = Gtk.Grid(column_spacing=8, row_spacing=8)
+            grid.set_column_homogeneous(True)
+            for index, (label, target) in enumerate(shows):
+                button = Gtk.Button(label=label)
+                button.get_style_context().add_class("remote-button")
+                button.connect("clicked", self.on_show_clicked, target)
+                grid.attach(button, index % 2, index // 2, 1, 1)
+            popover_box.pack_start(grid, False, False, 0)
+        else:
+            hint = Gtk.Label(label="No shows yet.\nAdd some in Options › Buttons.", xalign=0)
+            hint.get_style_context().add_class("hint")
+            popover_box.pack_start(hint, False, False, 0)
+
+        self.shows_popover.add(popover_box)
+        popover_box.show_all()
+        if keep_open:
+            self.shows_popover.popup()
+        else:
+            self.shows_popover.popdown()
+
+    def on_show_clicked(self, _button: Gtk.Button, target: str) -> None:
+        if hasattr(self, "shows_popover"):
+            self.shows_popover.popdown()
+        self.launch(target)
 
     def _build_shortcuts_grid(self) -> Gtk.Grid:
         grid = Gtk.Grid(column_spacing=8, row_spacing=8)
@@ -1119,6 +1242,8 @@ class TellyKeysWindow(Gtk.Window):
         self.settings = reset_all()
         self.host_entry.set_text("")
         self._refresh_device_combo()
+        self._refresh_show_combo()
+        self.rebuild_shows()
         self.code_input.clear()
         self.code_row.hide()
         self.remote_panel.hide()
@@ -1164,41 +1289,61 @@ class TellyKeysWindow(Gtk.Window):
         self._replace_app_button(label, target)
         self.set_status(f"Saved {label}.")
 
-    def on_bluetooth_keyboard_toggled(self, check: Gtk.CheckButton) -> None:
-        enabled = check.get_active()
-        self.settings = set_bluetooth_keyboard_enabled(self.settings, enabled)
+    def _show_app_lookup(self, app_label: str | None) -> tuple[str, str, str | None]:
+        for label, base, search in SHOW_APPS:
+            if label == app_label:
+                return label, base, search
+        return SHOW_APPS[0]
+
+    def _refresh_show_combo(self) -> None:
+        if not hasattr(self, "show_combo"):
+            return
+        self.show_combo.remove_all()
+        shows = self.saved_shows()
+        for label, _target in shows:
+            self.show_combo.append(label, label)
+        if shows:
+            self.show_combo.set_active_id(shows[0][0])
+
+    def _save_shows(self, shows: list[tuple[str, str]]) -> None:
+        self.settings = set_shows(self.settings, [ShortcutButton(label=label, target=target) for label, target in shows])
         save_settings(self.settings)
-        self.remote.set_bluetooth_keyboard_enabled(enabled)
-        self.refresh_bluetooth_text_status()
-        if enabled:
-            self.set_status("Bluetooth keyboard text is on. Set it up once if the TV is not paired yet.")
+        self._refresh_show_combo()
+        self.rebuild_shows()
+
+    def on_add_show(self, _button: Gtk.Button) -> None:
+        name = self.show_name_entry.get_text().strip()
+        if not name:
+            self.set_status("Enter a show name.")
+            return
+
+        app_label, base, search = self._show_app_lookup(self.show_app_combo.get_active_id())
+        link = self.show_link_entry.get_text().strip()
+        if link:
+            target = link
+        elif search:
+            target = search.format(q=quote_plus(name))
         else:
-            self.set_status("Bluetooth keyboard mode disabled.")
+            target = base
 
-    def refresh_bluetooth_text_status(self) -> bool:
-        def wrapped() -> None:
-            try:
-                enabled, helper_running, keyboard_connected = self.remote.bluetooth_text_status()
-                GLib.idle_add(self.show_bluetooth_text_status, enabled, helper_running, keyboard_connected)
-            except Exception:
-                return
-
-        self.runner.call(wrapped)
-        return True
-
-    def show_bluetooth_text_status(self, enabled: bool, helper_running: bool, keyboard_connected: bool) -> bool:
-        if not hasattr(self, "text_method_label"):
-            return False
-        if keyboard_connected and enabled:
-            text = "Text: Bluetooth keyboard connected"
-        elif helper_running and enabled:
-            text = "Text: Bluetooth keyboard ready to pair"
-        elif enabled:
-            text = "Text: Bluetooth keyboard setup needed"
+        shows = [(label, button_target) for label, button_target in self.saved_shows() if label != name]
+        shows.append((name, target))
+        self._save_shows(shows)
+        self.show_name_entry.set_text("")
+        self.show_link_entry.set_text("")
+        if not link and not search:
+            self.set_status(f"Saved {name}. {app_label} can't search by name — paste the show's link to open it directly.")
         else:
-            text = "Text: automatic"
-        self.text_method_label.set_text(text)
-        return False
+            self.set_status(f"Saved show: {name}.")
+
+    def on_remove_show(self, _button: Gtk.Button) -> None:
+        label = self.show_combo.get_active_id()
+        if not label:
+            self.set_status("No show is selected.")
+            return
+        shows = [(show_label, target) for show_label, target in self.saved_shows() if show_label != label]
+        self._save_shows(shows)
+        self.set_status(f"Removed {label} from Shows.")
 
     def refresh_microphone_combo(self) -> None:
         if not hasattr(self, "microphone_combo"):
@@ -1259,58 +1404,6 @@ class TellyKeysWindow(Gtk.Window):
 
         self.runner.call(wrapped)
 
-    def on_setup_bluetooth_keyboard(self, _button: Gtk.Button) -> None:
-        self.set_status("Setting up Bluetooth keyboard mode ...")
-
-        def wrapped() -> None:
-            try:
-                result = self.remote.prepare_bluetooth_keyboard()
-                GLib.idle_add(self.after_setup_bluetooth_keyboard, result)
-            except Exception as exc:  # noqa: BLE001
-                GLib.idle_add(self.set_status, str(exc))
-
-        self.runner.call(wrapped)
-
-    def after_setup_bluetooth_keyboard(self, result: BluetoothKeyboardSetup) -> bool:
-        if result.ok:
-            self.bluetooth_keyboard_check.set_active(True)
-            if result.keyboard_connected:
-                self.set_status("Bluetooth keyboard is connected and ready.")
-            else:
-                self.set_status("Bluetooth keyboard is ready. Pair TellyKeys Keyboard from the TV's Bluetooth menu.")
-            self.show_bluetooth_text_status(True, result.helper_running, result.keyboard_connected)
-        else:
-            self.set_status(result.message)
-        return False
-
-    def on_reset_bluetooth_keyboard(self, _button: Gtk.Button) -> None:
-        remove_system_fix = self.confirm(
-            "Reset Bluetooth keyboard?",
-            "This stops the keyboard helper and removes its local setup. If TellyKeys changed the system Bluetooth service, it will ask for permission to restore it.",
-        )
-        if not remove_system_fix:
-            return
-
-        self.set_status("Resetting Bluetooth keyboard setup ...")
-
-        def wrapped() -> None:
-            try:
-                result = self.remote.reset_bluetooth_keyboard(remove_system_fix=True)
-                GLib.idle_add(self.after_reset_bluetooth_keyboard, result)
-            except Exception as exc:  # noqa: BLE001
-                GLib.idle_add(self.set_status, str(exc))
-
-        self.runner.call(wrapped)
-
-    def after_reset_bluetooth_keyboard(self, result: BluetoothKeyboardSetup) -> bool:
-        if result.ok:
-            self.settings = set_bluetooth_keyboard_enabled(self.settings, False)
-            save_settings(self.settings)
-            self.bluetooth_keyboard_check.set_active(False)
-        self.show_bluetooth_text_status(False, result.helper_running, result.keyboard_connected)
-        self.set_status(result.message)
-        return False
-
     def on_remove_custom_button(self, _button: Gtk.Button) -> None:
         label = self.custom_button_combo.get_active_id() or self.custom_label_entry.get_text().strip()
         if not label:
@@ -1369,10 +1462,6 @@ class TellyKeysWindow(Gtk.Window):
         lines = [
             f"ADB: {adb_status}",
             f"ADB target: {diagnostics.adb_target or 'unknown'}",
-            f"Bluetooth keyboard: {'on' if diagnostics.bluetooth_enabled else 'off'}",
-            f"Bluetooth helper: {'running' if diagnostics.bluetooth_helper_running else 'not running'}",
-            f"Bluetooth paired: {'yes' if diagnostics.bluetooth_keyboard_connected else 'no'}",
-            f"Bluetooth system fix: {'installed' if diagnostics.bluetooth_system_fix_installed else 'not installed'}",
             f"Remote IME counters: {diagnostics.ime_counter}/{diagnostics.ime_field_counter}",
             f"Current app: {diagnostics.current_app or 'unknown'}",
             "",
@@ -1457,23 +1546,49 @@ class TellyKeysWindow(Gtk.Window):
             try:
                 method = self.remote.text(text)
                 GLib.idle_add(self.after_send_text, method)
-            except BluetoothKeyboardNotConnected as exc:
-                GLib.idle_add(self.set_status, str(exc))
-                GLib.idle_add(self.refresh_bluetooth_text_status)
             except Exception as exc:  # noqa: BLE001
                 GLib.idle_add(self.set_status, str(exc))
 
         self.runner.call(wrapped)
 
-    def after_send_text(self, method: str | None) -> bool:
+    def on_delete_text(self, _button: Gtk.Button | None = None) -> None:
+        self.set_status("Deleting text ...")
+
+        def wrapped() -> None:
+            try:
+                method = self.remote.delete_text()
+                GLib.idle_add(self.after_delete_text, method)
+            except Exception as exc:  # noqa: BLE001
+                GLib.idle_add(self.set_status, str(exc))
+
+        self.runner.call(wrapped)
+
+    def on_clear_text(self, _button: Gtk.Button | None = None) -> None:
+        self.set_status("Clearing text ...")
+
+        def wrapped() -> None:
+            try:
+                method = self.remote.clear_text()
+                GLib.idle_add(self.after_clear_text, method)
+            except Exception as exc:  # noqa: BLE001
+                GLib.idle_add(self.set_status, str(exc))
+
+        self.runner.call(wrapped)
+
+    def on_text_entry_key_press(self, _entry: Gtk.Entry, event: Gdk.EventKey) -> bool:
+        if event.keyval in (Gdk.KEY_BackSpace, Gdk.KEY_Delete) and not self.text_entry.get_text():
+            self.on_delete_text(None)
+            return True
+        return False
+
+    def after_send_text(self, result: TextSendResult | str | None) -> bool:
+        method = result.method if isinstance(result, TextSendResult) else result
         messages = {
-            "bluetooth_keyboard": "Text sent with Bluetooth keyboard mode.",
             "youtube_search": "Opened YouTube search.",
             "adb": "Text sent with ADB.",
             "remote_ime": "Text sent. If nothing appears, the TV app is not accepting remote text input.",
         }
         labels = {
-            "bluetooth_keyboard": "Text: used Bluetooth keyboard",
             "youtube_search": "Text: used YouTube search link",
             "adb": "Text: used ADB",
             "remote_ime": "Text: used Google TV text input",
@@ -1481,6 +1596,34 @@ class TellyKeysWindow(Gtk.Window):
         if hasattr(self, "text_method_label") and method in labels:
             self.text_method_label.set_text(labels[method])
         self.set_status(messages.get(method, "No text was sent."))
+        return False
+
+    def after_delete_text(self, method: str | None) -> bool:
+        labels = {
+            "adb": "Text: deleted with ADB",
+            "remote_key": "Text: sent Google TV delete key",
+        }
+        if hasattr(self, "text_method_label") and method in labels:
+            self.text_method_label.set_text(labels[method])
+        self.set_status("Delete sent to the TV.")
+        return False
+
+    def after_clear_text(self, method: str | None) -> bool:
+        labels = {
+            "adb": "Text: cleared with ADB",
+            "remote_key": "Text: sent Google TV delete keys",
+        }
+        if hasattr(self, "text_method_label") and method in labels:
+            self.text_method_label.set_text(labels[method])
+        self.set_status("Clear sent to the TV.")
+        return False
+
+    def show_text_field_state(self, state: TextFieldState) -> bool:
+        if not hasattr(self, "text_entry"):
+            return False
+        self.text_entry.set_placeholder_text(state.label or "TV text field")
+        self.text_method_label.set_text("Text: TV keyboard field detected")
+        self.text_entry.grab_focus()
         return False
 
     def on_launch_custom(self, _button: Gtk.Button) -> None:

@@ -12,7 +12,6 @@ finish-args:
   - --device=dri
   - --filesystem=xdg-config/tellykeys:create
   - --talk-name=org.freedesktop.Avahi
-  - --system-talk-name=org.bluez
 
 modules:
   - name: python-dependencies

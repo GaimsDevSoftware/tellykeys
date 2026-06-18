@@ -3,8 +3,7 @@
 **A polished Linux desktop remote for Google TV and Android TV.**
 
 TellyKeys gives Linux users a simple, friendly Google TV remote with pairing,
-D-pad controls, app shortcuts, text input, optional Bluetooth keyboard mode, and
-experimental voice search.
+D-pad controls, app shortcuts, text input, and experimental voice search.
 
 It is built for the “it should just work” desktop experience: discover the TV,
 pair once, then use the large remote controls without thinking about protocols,
@@ -54,7 +53,6 @@ sudo dnf install python3-gobject gtk3 avahi-tools pipewire-utils pulseaudio-util
 - Large, simple remote buttons for D-pad, OK, Back, Home, Menu, volume, mute, and media.
 - App shortcut popover with editable/removable buttons.
 - Text input with contextual YouTube search fallback.
-- Optional Bluetooth keyboard mode for apps that reject remote text input.
 - Experimental voice search using the Linux microphone.
 - Tray mode and optional Cinnamon applet.
 - Settings and help pages built into the app.
@@ -81,7 +79,6 @@ Text input is difficult on Google TV because apps behave differently.
 TellyKeys uses several strategies:
 
 - YouTube: opens a YouTube search URL directly when YouTube is active.
-- Bluetooth keyboard mode: sends text as a paired Bluetooth keyboard.
 - ADB: optional fallback when developer/network debugging is enabled.
 - Remote IME: Google TV remote text protocol fallback.
 
@@ -176,7 +173,6 @@ macOS and Windows ports are planned later.
 
 Known rough edges:
 
-- Bluetooth keyboard mode may require BlueZ configuration on some systems.
 - Voice search depends on TV support for third-party remote voice sessions.
 - App-specific text input varies by TV app.
 

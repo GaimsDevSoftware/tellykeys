@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-dropin_file=/etc/systemd/system/bluetooth.service.d/tellykeys-hid-keyboard.conf
-
-rm -f "$dropin_file"
-systemctl daemon-reload
-systemctl restart bluetooth.service

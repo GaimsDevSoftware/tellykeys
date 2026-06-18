@@ -9,8 +9,11 @@ from tellykeys.settings import (
     remove_button,
     set_app_buttons,
     set_microphone_source,
+    set_shows,
 )
-from tellykeys.remote import _adb_input_text, _youtube_search_url
+from androidtvremote2.remotemessage_pb2 import RemoteMessage
+
+from tellykeys.remote import TellyKeysRemote, TextFieldState, _adb_input_text, _youtube_search_url
 
 
 class SettingsTests(unittest.TestCase):
@@ -66,6 +69,25 @@ class SettingsTests(unittest.TestCase):
 
         self.assertEqual(settings.microphone_source, "alsa_input.test")
 
+    def test_set_shows_replaces_show_list(self) -> None:
+        settings = set_shows(Settings(), [ShortcutButton("Gabby", "https://www.netflix.com/title/81009946")])
+
+        self.assertEqual(
+            [(button.label, button.target) for button in settings.shows],
+            [("Gabby", "https://www.netflix.com/title/81009946")],
+        )
+
+    def test_shows_survive_other_mutations(self) -> None:
+        settings = set_shows(Settings(), [ShortcutButton("Gabby", "https://www.netflix.com/title/81009946")])
+        settings = remember_device(settings, "10.0.0.2", "Living Room")
+        settings = set_microphone_source(settings, "alsa_input.test")
+        settings = set_app_buttons(settings, [ShortcutButton("YouTube", "https://www.youtube.com")])
+
+        self.assertEqual(
+            [(button.label, button.target) for button in settings.shows],
+            [("Gabby", "https://www.netflix.com/title/81009946")],
+        )
+
     def test_adb_input_text_escapes_spaces(self) -> None:
         self.assertEqual(_adb_input_text("hei der"), "hei%sder")
 
@@ -74,6 +96,58 @@ class SettingsTests(unittest.TestCase):
             _youtube_search_url("hei der"),
             "https://www.youtube.com/results?search_query=hei+der",
         )
+
+    def test_ime_show_request_emits_text_field_state(self) -> None:
+        remote = TellyKeysRemote()
+        states: list[TextFieldState] = []
+        remote.set_text_field_callback(states.append)
+
+        message = RemoteMessage()
+        status = message.remote_ime_show_request.remote_text_field_status
+        status.value = "abc"
+        status.start = 3
+        status.end = 3
+        status.label = "Search"
+
+        remote._observe_text_field_message(message)
+
+        self.assertEqual(states, [TextFieldState(value="abc", start=3, end=3, label="Search", current_app=None)])
+
+    def test_active_text_field_prefers_remote_ime_before_contextual_search(self) -> None:
+        class FakeProtocolRemote:
+            current_app = "com.google.android.youtube.tv"
+
+            def __init__(self) -> None:
+                self.sent_text: list[str] = []
+
+            def send_text(self, text: str) -> None:
+                self.sent_text.append(text)
+
+        fake_remote = FakeProtocolRemote()
+        remote = TellyKeysRemote()
+        remote._remote = fake_remote
+        remote._last_text_field = TextFieldState(value="", start=0, end=0, label=None, current_app=None)
+        remote._last_text_field_seen_at = __import__("time").monotonic()
+        remote._send_text_with_adb = lambda text: False
+
+        result = remote.text("hei")
+
+        self.assertEqual(result.method, "remote_ime")
+        self.assertEqual(result.attempts, ("adb", "remote_ime"))
+        self.assertEqual(fake_remote.sent_text, ["hei"])
+
+    def test_clear_text_deletes_detected_text_length(self) -> None:
+        deleted: list[str] = []
+        remote = TellyKeysRemote()
+        remote._last_text_field = TextFieldState(value="abc", start=3, end=3, label=None, current_app=None)
+        remote._last_text_field_seen_at = __import__("time").monotonic()
+        remote._send_key_with_adb = lambda key_code, count=1: False
+        remote.key = deleted.append
+
+        method = remote.clear_text()
+
+        self.assertEqual(method, "remote_key")
+        self.assertEqual(deleted, ["DEL", "DEL", "DEL"])
 
 
 if __name__ == "__main__":

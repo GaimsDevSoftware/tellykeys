@@ -1,0 +1,205 @@
+name: release
+
+# Triggers:
+#   - push av en versjons-tag (v*) → bygger ALT + lager/oppdaterer Release.
+#   - workflow_dispatch          → bygger ALT, laster opp som workflow-
+#                                  artifacts. INGEN Release lages.
+#     Bruk dispatch for å verifisere at byggene fungerer før du tagger.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # softprops/action-gh-release trenger dette for å publisere
+
+jobs:
+  # 1) Felles forhåndssjekk: pyproject-versjon, og at tag matcher den.
+  verify-version:
+    name: Verify version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      is_tag: ${{ steps.read.outputs.is_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: read
+        name: Les versjon fra pyproject.toml og sammenlign med tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(python3 - <<'PY'
+          import re, pathlib
+          text = pathlib.Path("pyproject.toml").read_text(encoding="utf-8")
+          m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
+          if not m:
+              raise SystemExit("Fant ikke 'version = \"...\"' i pyproject.toml")
+          print(m.group(1))
+          PY
+          )"
+          echo "pyproject version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            EXPECTED="v${VERSION}"
+            echo "is_tag=true" >> "$GITHUB_OUTPUT"
+            echo "tag: $TAG    expected: $EXPECTED"
+            if [[ "$TAG" != "$EXPECTED" ]]; then
+              echo "::error::Tag '$TAG' matcher ikke pyproject-versjon '$VERSION' (forventet '$EXPECTED'). Bump pyproject.toml først, eller tag riktig versjon."
+              exit 1
+            fi
+          else
+            echo "is_tag=false" >> "$GITHUB_OUTPUT"
+            echo "Ingen tag — kjøres som dispatch, hopper over tag/pyproject-konsistens-sjekk."
+          fi
+
+  # 2) .deb-bygg via scripts/build-deb
+  build-deb:
+    name: Build .deb
+    needs: verify-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Lag .venv med runtime-deps (bundlet inn i .deb)
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -e .
+
+      - name: Kjør scripts/build-deb
+        run: bash scripts/build-deb
+
+      - name: Vis innhold av dist/
+        run: ls -la dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tellykeys-deb
+          path: dist/tellykeys_*_all.deb
+          if-no-files-found: error
+
+  # 3) .rpm-bygg via scripts/build-rpm
+  build-rpm:
+    name: Build .rpm
+    needs: verify-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Installer rpmbuild (ikke preinstallert på ubuntu-latest)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rpm
+
+      - name: Lag .venv med runtime-deps (bundlet inn i .rpm)
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -e .
+
+      - name: Kjør scripts/build-rpm
+        run: bash scripts/build-rpm
+
+      - name: Vis innhold av dist/
+        run: ls -la dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tellykeys-rpm
+          path: dist/tellykeys-*-1.*.noarch.rpm
+          if-no-files-found: error
+
+  # 4) Flatpak — separat job, tillates å feile uten å sprenge releasen.
+  #    Bruker bionic-base ubuntu-latest + manuell flatpak/flatpak-builder-setup,
+  #    så vi får kjøre scripts/build-flatpak uendret (Robert ba om å gjenbruke
+  #    eksisterende skript, ikke skrive byggelogikken om).
+  build-flatpak:
+    name: Build .flatpak
+    needs: verify-version
+    runs-on: ubuntu-latest
+    # Hvis flatpak feiler så vi får fortsatt .deb + .rpm i Releasen.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer flatpak + flatpak-builder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder
+
+      - name: Legg til Flathub-remote (per-bruker)
+        run: |
+          flatpak --user remote-add --if-not-exists flathub \
+            https://flathub.org/repo/flathub.flatpakrepo
+
+      - name: Installer GNOME 46 Platform + SDK
+        # Manifestet låser runtime-version: '46' og sdk: org.gnome.Sdk
+        run: |
+          flatpak --user install -y flathub \
+            org.gnome.Platform//46 \
+            org.gnome.Sdk//46
+
+      - name: Cache flatpak-builder mellomlager
+        uses: actions/cache@v4
+        with:
+          path: |
+            .flatpak-builder
+            build/flatpak
+          key: flatpak-${{ runner.os }}-${{ hashFiles('packaging/flatpak/*.yml') }}
+          restore-keys: |
+            flatpak-${{ runner.os }}-
+
+      - name: Kjør scripts/build-flatpak
+        run: bash scripts/build-flatpak
+
+      - name: Vis innhold av dist/
+        run: ls -la dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tellykeys-flatpak
+          path: dist/org.gaimsdevsoftware.TellyKeys.flatpak
+          if-no-files-found: error
+
+  # 5) Publish — kjører bare for tag-push, ikke for dispatch.
+  #    needs ALLE tre, men flatpak har continue-on-error så jobben
+  #    rapporterer success selv om flatpak feilet. Vi laster opp det
+  #    som faktisk eksisterer.
+  publish:
+    name: Publish to GitHub Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [verify-version, build-deb, build-rpm, build-flatpak]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Vis hva som ble lastet ned
+        run: |
+          ls -la artifacts/ || true
+          find artifacts -type f
+
+      - name: Upload til Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: TellyKeys ${{ needs.verify-version.outputs.version }}
+          fail_on_unmatched_files: false
+          files: |
+            artifacts/tellykeys_*_all.deb
+            artifacts/tellykeys-*-1.*.noarch.rpm
+            artifacts/org.gaimsdevsoftware.TellyKeys.flatpak

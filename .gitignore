@@ -8,3 +8,7 @@ __pycache__/
 dist/
 build/
 
+# Foreign / runtime data — not part of TellyKeys
+py-gpt/
+var/
+

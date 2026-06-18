@@ -26,12 +26,11 @@ if [[ ! -d "$SITE/androidtvremote2" || ! -d "$SITE/aiofiles" ]]; then
 fi
 
 rm -rf "$PKGROOT"
-mkdir -p "$PKGROOT/DEBIAN" "$PKGROOT/opt/tellykeys/lib" "$PKGROOT/opt/tellykeys/scripts" "$PKGROOT/usr/bin" "$PKGROOT/usr/share/applications" "$PKGROOT/usr/share/icons/hicolor/scalable/apps" "$PKGROOT/usr/share/doc/tellykeys"
+mkdir -p "$PKGROOT/DEBIAN" "$PKGROOT/opt/tellykeys/lib" "$PKGROOT/usr/bin" "$PKGROOT/usr/share/applications" "$PKGROOT/usr/share/icons/hicolor/scalable/apps" "$PKGROOT/usr/share/doc/tellykeys"
 
 cp -a "$ROOT/src/tellykeys" "$PKGROOT/opt/tellykeys/lib/"
 cp -a "$SITE/androidtvremote2" "$PKGROOT/opt/tellykeys/lib/"
 cp -a "$SITE/aiofiles" "$PKGROOT/opt/tellykeys/lib/"
-cp -a "$ROOT/scripts/tellykeys-bluetooth-keyboard-helper" "$ROOT/scripts/tellykeys-bluetooth-system-fix" "$ROOT/scripts/tellykeys-bluetooth-system-unfix" "$PKGROOT/opt/tellykeys/scripts/"
 cp "$ROOT/packaging/linux/tellykeys.desktop" "$PKGROOT/usr/share/applications/"
 cp "$ROOT/packaging/linux/tellykeys-tray.desktop" "$PKGROOT/usr/share/applications/"
 cp "$ROOT/assets/tellykeys.svg" "$PKGROOT/usr/share/icons/hicolor/scalable/apps/tellykeys.svg"
@@ -43,7 +42,6 @@ export PYTHONPATH="/opt/tellykeys/lib${PYTHONPATH:+:$PYTHONPATH}"
 exec python3 -m tellykeys.app "$@"
 EOF
 chmod 0755 "$PKGROOT/usr/bin/tellykeys"
-chmod 0755 "$PKGROOT/opt/tellykeys/scripts/"*
 
 cat > "$PKGROOT/DEBIAN/control" <<EOF
 Package: tellykeys
@@ -53,11 +51,10 @@ Priority: optional
 Architecture: all
 Maintainer: GaimsDevSoftware <noreply@gaims.dev>
 Depends: python3 (>= 3.11), python3-gi, gir1.2-gtk-3.0, avahi-utils, python3-cryptography, python3-protobuf, pipewire-bin | pulseaudio-utils
-Recommends: android-tools-adb, bluez, policykit-1
+Recommends: android-tools-adb
 Description: Google TV and Android TV remote for Linux
  TellyKeys is a GTK desktop remote for Google TV and Android TV with pairing,
- D-pad controls, app shortcuts, text input, optional Bluetooth keyboard mode,
- and experimental voice search.
+ D-pad controls, app shortcuts, text input, and experimental voice search.
 EOF
 
 mkdir -p "$OUT"
