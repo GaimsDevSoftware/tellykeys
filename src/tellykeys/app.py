@@ -49,17 +49,17 @@ warnings.filterwarnings(
 PAIRING_CODE_LENGTH = 6
 DEFAULT_MICROPHONE_ID = "__default__"
 
-# Apps you can save a favorite show for. Each entry is
-# (display name, launch target when no link is given, search-deep-link template).
-# A search template means "type a show name -> open the app's search for it".
-# When it is None the app has no public search deep link, so a plain name can
-# only open the app itself; paste the show's link to open it directly.
-SHOW_APPS: list[tuple[str, str, str | None]] = [
-    ("YouTube", "https://www.youtube.com", "https://www.youtube.com/results?search_query={q}"),
-    ("Netflix", "com.netflix.ninja", "https://www.netflix.com/search?q={q}"),
-    ("Disney+", "com.disney.disneyplus", None),
-    ("Prime Video", "com.amazon.amazonvideo.livingroom", None),
-    ("HBO Max", "https://play.hbomax.com", None),
+# How a saved show is opened. Each entry is (display name, mode).
+#   "search"  -> Google TV universal search jumps straight to the title's
+#                detail page and presses play, opening it in whichever app has
+#                it (Netflix, Disney+, Prime, ...). Needs ADB. Works for titles
+#                Netflix/Disney+ refuse to deep-link to directly.
+#   "youtube" -> YouTube's own search deep link (better for YouTube content).
+SHOW_SEARCH_PREFIX = "search:"
+YOUTUBE_SEARCH_URL = "https://www.youtube.com/results?search_query={q}"
+SHOW_APPS: list[tuple[str, str]] = [
+    ("Any app", "search"),
+    ("YouTube", "youtube"),
 ]
 
 
@@ -396,29 +396,24 @@ class TellyKeysWindow(Gtk.Window):
         buttons_box.pack_start(shows_label, False, False, 0)
 
         shows_hint = Gtk.Label(
-            label="Pick an app, name the show, and tap Save. To open a show directly, paste its link (e.g. netflix.com/title/…); otherwise the name opens the app's search.",
+            label="Name a show and tap Save. \"Any app\" uses Google TV search to jump straight into the show in whichever app has it (Netflix, Disney+, …) — needs ADB. \"YouTube\" searches YouTube instead.",
             xalign=0,
         )
         shows_hint.get_style_context().add_class("hint")
         shows_hint.set_line_wrap(True)
         buttons_box.pack_start(shows_hint, False, False, 0)
 
-        self.show_app_combo = Gtk.ComboBoxText()
-        for app_label, _base, _search in SHOW_APPS:
-            self.show_app_combo.append(app_label, app_label)
-        self.show_app_combo.set_active(0)
-        buttons_box.pack_start(self.show_app_combo, False, False, 0)
-
         show_row = Gtk.Box(spacing=8)
         buttons_box.pack_start(show_row, False, False, 0)
         self.show_name_entry = Gtk.Entry()
-        self.show_name_entry.set_placeholder_text("Show name")
+        self.show_name_entry.set_placeholder_text("Show name (e.g. Gabby's Dollhouse)")
         self.show_name_entry.connect("activate", self.on_add_show)
         show_row.pack_start(self.show_name_entry, True, True, 0)
-        self.show_link_entry = Gtk.Entry()
-        self.show_link_entry.set_placeholder_text("Paste link (optional)")
-        self.show_link_entry.connect("activate", self.on_add_show)
-        show_row.pack_start(self.show_link_entry, True, True, 0)
+        self.show_app_combo = Gtk.ComboBoxText()
+        for app_label, _mode in SHOW_APPS:
+            self.show_app_combo.append(app_label, app_label)
+        self.show_app_combo.set_active(0)
+        show_row.pack_start(self.show_app_combo, False, False, 0)
 
         self.show_combo = Gtk.ComboBoxText()
         self._refresh_show_combo()
@@ -800,8 +795,8 @@ class TellyKeysWindow(Gtk.Window):
             (
                 "starred-symbolic",
                 "Favorite shows",
-                "Use Shows on the remote to jump straight to a saved show. Add one in Settings > Buttons: pick the app, name the show, and tap Save. Paste the show's link (e.g. netflix.com/title/…) to open it directly; otherwise the name opens the app's search.",
-                "overview shows favorite favourite netflix youtube disney prime title deep link search gabby add buttons launch",
+                "Use Shows on the remote to jump straight into a saved show. Add one in Settings > Buttons: name the show and tap Save. \"Any app\" uses Google TV search to open it in whichever app has it (Netflix, Disney+, …) and needs ADB; \"YouTube\" searches YouTube. Netflix can't be deep-linked directly on Android TV, so Google TV search is used instead.",
+                "overview shows favorite favourite netflix youtube disney prime google tv search adb gabby add buttons launch",
             ),
             (
                 "preferences-system-symbolic",
@@ -1041,7 +1036,26 @@ class TellyKeysWindow(Gtk.Window):
     def on_show_clicked(self, _button: Gtk.Button, target: str) -> None:
         if hasattr(self, "shows_popover"):
             self.shows_popover.popdown()
-        self.launch(target)
+        if target.startswith(SHOW_SEARCH_PREFIX):
+            query = target[len(SHOW_SEARCH_PREFIX):]
+            self.open_show_via_search(query)
+        else:
+            self.launch(target)
+
+    def open_show_via_search(self, query: str) -> None:
+        self.set_status(f"Opening {query} ...")
+
+        def wrapped() -> None:
+            ok = self.remote.global_search(query)
+            if ok:
+                GLib.idle_add(self.set_status, f"Opening {query} on the TV ...")
+            else:
+                GLib.idle_add(
+                    self.set_status,
+                    "Could not open the show. Google TV search needs ADB — set it up from Settings › Text.",
+                )
+
+        self.runner.call(wrapped)
 
     def _build_shortcuts_grid(self) -> Gtk.Grid:
         grid = Gtk.Grid(column_spacing=8, row_spacing=8)
@@ -1289,10 +1303,10 @@ class TellyKeysWindow(Gtk.Window):
         self._replace_app_button(label, target)
         self.set_status(f"Saved {label}.")
 
-    def _show_app_lookup(self, app_label: str | None) -> tuple[str, str, str | None]:
-        for label, base, search in SHOW_APPS:
+    def _show_app_lookup(self, app_label: str | None) -> tuple[str, str]:
+        for label, mode in SHOW_APPS:
             if label == app_label:
-                return label, base, search
+                return label, mode
         return SHOW_APPS[0]
 
     def _refresh_show_combo(self) -> None:
@@ -1317,24 +1331,17 @@ class TellyKeysWindow(Gtk.Window):
             self.set_status("Enter a show name.")
             return
 
-        app_label, base, search = self._show_app_lookup(self.show_app_combo.get_active_id())
-        link = self.show_link_entry.get_text().strip()
-        if link:
-            target = link
-        elif search:
-            target = search.format(q=quote_plus(name))
+        _app_label, mode = self._show_app_lookup(self.show_app_combo.get_active_id())
+        if mode == "youtube":
+            target = YOUTUBE_SEARCH_URL.format(q=quote_plus(name))
         else:
-            target = base
+            target = SHOW_SEARCH_PREFIX + name
 
         shows = [(label, button_target) for label, button_target in self.saved_shows() if label != name]
         shows.append((name, target))
         self._save_shows(shows)
         self.show_name_entry.set_text("")
-        self.show_link_entry.set_text("")
-        if not link and not search:
-            self.set_status(f"Saved {name}. {app_label} can't search by name — paste the show's link to open it directly.")
-        else:
-            self.set_status(f"Saved show: {name}.")
+        self.set_status(f"Saved show: {name}.")
 
     def on_remove_show(self, _button: Gtk.Button) -> None:
         label = self.show_combo.get_active_id()

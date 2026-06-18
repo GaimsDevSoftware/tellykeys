@@ -26,6 +26,17 @@ VOICE_BYTES_PER_SECOND = 8000 * 2
 VOICE_SILENCE_TIMEOUT_BYTES = int(VOICE_BYTES_PER_SECOND * 3)
 VOICE_NO_SPEECH_TIMEOUT_BYTES = int(VOICE_BYTES_PER_SECOND * 8)
 
+# Android's `input text` injects characters back-to-back, and some TV
+# keyboards/apps (notably Netflix) drop characters that arrive too fast.
+# Send the text in small chunks with a short pause so the IME keeps up.
+TEXT_ADB_CHARS_PER_CHUNK = 1
+TEXT_ADB_CHUNK_DELAY = 0.05
+
+# Google TV universal search jumps to a title's detail page; pressing OK on the
+# focused play button opens it in whichever app has it (Netflix, Disney+, ...).
+# Wait for the detail page to load before pressing OK.
+SEARCH_OPEN_DELAY = 3.8
+
 
 @dataclass(frozen=True)
 class TvStatus:
@@ -272,6 +283,56 @@ class TellyKeysRemote:
     def launch(self, app_id_or_url: str) -> None:
         self._require_remote().send_launch_app_command(app_id_or_url)
 
+    def global_search(self, query: str, open_result: bool = True) -> bool:
+        """Open a show via Google TV universal search.
+
+        Launches the system search pre-filled with ``query`` (which jumps to the
+        title's detail page), then optionally presses OK on the focused play
+        button to open the show in whichever app has it. Requires ADB; returns
+        ``False`` if ADB is unavailable so the caller can report it.
+        """
+        query = query.strip()
+        if not query:
+            return False
+
+        adb = shutil.which("adb")
+        if not adb or not self.host:
+            return False
+
+        target = f"{self.host}:5555"
+        try:
+            if not self._is_adb_authorized():
+                subprocess.run([adb, "connect", target], check=False, capture_output=True, text=True, timeout=4)
+            if not self._is_adb_authorized():
+                return False
+
+            # Single-quote the query for the device shell so titles with spaces
+            # are passed as one argument.
+            quoted = "'" + query.replace("'", "'\\''") + "'"
+            command = f"am start -a android.search.action.GLOBAL_SEARCH -e query {quoted}"
+            result = subprocess.run(
+                [adb, "-s", target, "shell", command],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=6,
+            )
+            if result.returncode != 0:
+                return False
+
+            if open_result:
+                time.sleep(SEARCH_OPEN_DELAY)
+                subprocess.run(
+                    [adb, "-s", target, "shell", "input", "keyevent", "DPAD_CENTER"],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=4,
+                )
+            return True
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+
     def start_voice_search(self) -> str:
         if self._voice_task and not self._voice_task.done():
             return "Voice search is already listening."
@@ -470,15 +531,26 @@ class TellyKeysRemote:
             if not self._is_adb_authorized():
                 return False
 
-            escaped = _adb_input_text(text)
-            result = subprocess.run(
-                [adb, "-s", target, "shell", "input", "text", escaped],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=4,
-            )
-            return result.returncode == 0
+            # Send in small chunks with a short pause to avoid dropped
+            # characters from too-fast injection. Once the first chunk lands
+            # we commit to ADB and return True, so the caller does not also
+            # fall back to remote IME (which would re-type the whole string).
+            last_start = max(0, len(text) - TEXT_ADB_CHARS_PER_CHUNK)
+            for index in range(0, len(text), TEXT_ADB_CHARS_PER_CHUNK):
+                chunk = text[index:index + TEXT_ADB_CHARS_PER_CHUNK]
+                escaped = _adb_input_text(chunk)
+                result = subprocess.run(
+                    [adb, "-s", target, "shell", "input", "text", escaped],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=4,
+                )
+                if index == 0 and result.returncode != 0:
+                    return False
+                if index < last_start:
+                    time.sleep(TEXT_ADB_CHUNK_DELAY)
+            return True
         except (OSError, subprocess.TimeoutExpired):
             return False
 

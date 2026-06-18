@@ -88,6 +88,65 @@ class SettingsTests(unittest.TestCase):
             [("Gabby", "https://www.netflix.com/title/81009946")],
         )
 
+    def test_send_text_with_adb_throttles_per_character(self) -> None:
+        from unittest import mock
+        from tellykeys import remote as remote_module
+
+        calls: list[list[str]] = []
+
+        class FakeCompleted:
+            returncode = 0
+
+        def fake_run(args, **kwargs):
+            calls.append(args)
+            return FakeCompleted()
+
+        remote = TellyKeysRemote()
+        remote.host = "10.0.0.2"
+        remote._is_adb_authorized = lambda: True
+
+        with mock.patch.object(remote_module.shutil, "which", return_value="/usr/bin/adb"), \
+             mock.patch.object(remote_module.subprocess, "run", side_effect=fake_run), \
+             mock.patch.object(remote_module.time, "sleep", return_value=None) as sleep_mock:
+            ok = remote._send_text_with_adb("hei")
+
+        self.assertTrue(ok)
+        input_calls = [c for c in calls if "input" in c and "text" in c]
+        # one `input text` invocation per character (no single fast burst)
+        self.assertEqual(len(input_calls), 3)
+        self.assertEqual("".join(c[-1] for c in input_calls), "hei")
+        # a pause between characters, but not a trailing one after the last
+        self.assertEqual(sleep_mock.call_count, 2)
+
+    def test_global_search_launches_query_and_opens_result(self) -> None:
+        from unittest import mock
+        from tellykeys import remote as remote_module
+
+        calls: list[list[str]] = []
+
+        class FakeCompleted:
+            returncode = 0
+
+        def fake_run(args, **kwargs):
+            calls.append(args)
+            return FakeCompleted()
+
+        remote = TellyKeysRemote()
+        remote.host = "10.0.0.2"
+        remote._is_adb_authorized = lambda: True
+
+        with mock.patch.object(remote_module.shutil, "which", return_value="/usr/bin/adb"), \
+             mock.patch.object(remote_module.subprocess, "run", side_effect=fake_run), \
+             mock.patch.object(remote_module.time, "sleep", return_value=None):
+            ok = remote.global_search("gabbys dukkehus")
+
+        self.assertTrue(ok)
+        joined = [" ".join(c) for c in calls]
+        # launches Google TV universal search with the quoted multi-word query
+        self.assertTrue(any("GLOBAL_SEARCH" in j and "'gabbys dukkehus'" in j for j in joined))
+        # then presses OK to open the focused play button
+        self.assertTrue(any("keyevent" in c and "DPAD_CENTER" in c for c in calls))
+
     def test_adb_input_text_escapes_spaces(self) -> None:
         self.assertEqual(_adb_input_text("hei der"), "hei%sder")
 
