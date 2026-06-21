@@ -90,6 +90,10 @@ class TellyKeysRemote:
         self._last_text_field: TextFieldState | None = None
         self._last_text_field_seen_at = 0.0
         self.microphone_source = ""
+        # Name shown to the TV and baked into the pairing certificate's Common
+        # Name. Must be unique per device, otherwise the TV overwrites the
+        # previous controller's pairing when a new one with the same name pairs.
+        self.client_name = APP_NAME
 
     def set_status_callback(self, callback: Callable[[TvStatus], None]) -> None:
         self._status_callback = callback
@@ -102,6 +106,9 @@ class TellyKeysRemote:
 
     def set_microphone_source(self, source: str) -> None:
         self.microphone_source = source.strip()
+
+    def set_client_name(self, name: str) -> None:
+        self.client_name = name.strip()[:64] or APP_NAME
 
     def _paths_for_host(self, host: str) -> tuple[str, str]:
         safe_host = "".join(ch if ch.isalnum() or ch in ".-" else "_" for ch in host)
@@ -118,7 +125,14 @@ class TellyKeysRemote:
             self._remote.disconnect()
 
         certfile, keyfile = self._paths_for_host(self.host)
-        self._remote = AndroidTVRemote(APP_NAME, certfile, keyfile, self.host, enable_voice=True)
+        desired_name = self.client_name or APP_NAME
+        if not _cert_common_name_matches(certfile, desired_name):
+            # The stored certificate was issued under a different name; remove it
+            # so a fresh one is generated under the current name (and re-paired).
+            for path in (certfile, keyfile):
+                with contextlib.suppress(FileNotFoundError):
+                    os.remove(path)
+        self._remote = AndroidTVRemote(desired_name, certfile, keyfile, self.host, enable_voice=True)
         return await self._remote.async_generate_cert_if_missing()
 
     async def device_name(self) -> str:
@@ -626,6 +640,28 @@ class AsyncRunner:
 
     def call(self, func: Callable, *args) -> None:
         self.loop.call_soon_threadsafe(func, *args)
+
+
+def _cert_common_name_matches(certfile: str, name: str) -> bool:
+    """Whether the stored certificate's Common Name equals ``name``.
+
+    Returns True when there is no certificate yet or it cannot be read, so we
+    never delete a certificate we are unsure about.
+    """
+    try:
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+
+        with open(certfile, "rb") as handle:
+            cert = x509.load_pem_x509_certificate(handle.read())
+        common_names = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+        if not common_names:
+            return True
+        return str(common_names[0].value) == name
+    except FileNotFoundError:
+        return True
+    except Exception:  # noqa: BLE001 - never force a re-pair on a read error
+        return True
 
 
 def _adb_input_text(text: str) -> str:

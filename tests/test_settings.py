@@ -9,6 +9,7 @@ from tellykeys.settings import (
     remove_button,
     set_app_buttons,
     set_microphone_source,
+    set_remote_name,
     set_shows,
 )
 from androidtvremote2.remotemessage_pb2 import RemoteMessage
@@ -117,6 +118,46 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual("".join(c[-1] for c in input_calls), "hei")
         # a pause between characters, but not a trailing one after the last
         self.assertEqual(sleep_mock.call_count, 2)
+
+    def test_cert_common_name_matches_detects_identity(self) -> None:
+        import os
+        import tempfile
+        from tellykeys.remote import _cert_common_name_matches
+        from androidtvremote2.certificate_generator import generate_selfsigned_cert
+
+        cert_pem, _key_pem = generate_selfsigned_cert("TellyKeys (laptop)")
+        with tempfile.NamedTemporaryFile("wb", suffix=".pem", delete=False) as handle:
+            handle.write(cert_pem)
+            path = handle.name
+        try:
+            self.assertTrue(_cert_common_name_matches(path, "TellyKeys (laptop)"))
+            self.assertFalse(_cert_common_name_matches(path, "TellyKeys (desktop)"))
+            # a missing certificate is treated as matching (nothing to remove)
+            self.assertTrue(_cert_common_name_matches(path + ".missing", "anything"))
+        finally:
+            os.remove(path)
+
+    def test_set_remote_name_trims_and_persists(self) -> None:
+        settings = set_remote_name(Settings(), "  TellyKeys (laptop)  ")
+
+        self.assertEqual(settings.remote_name, "TellyKeys (laptop)")
+
+    def test_remote_name_survives_other_mutations(self) -> None:
+        settings = set_remote_name(Settings(), "TellyKeys (laptop)")
+        settings = remember_device(settings, "10.0.0.2", "Living Room")
+        settings = set_microphone_source(settings, "mic")
+        settings = set_app_buttons(settings, [ShortcutButton("YT", "y")])
+
+        self.assertEqual(settings.remote_name, "TellyKeys (laptop)")
+
+    def test_remote_uses_configured_client_name_as_cert_identity(self) -> None:
+        remote = TellyKeysRemote()
+        self.assertEqual(remote.client_name, "TellyKeys")
+        remote.set_client_name("TellyKeys (laptop)")
+        self.assertEqual(remote.client_name, "TellyKeys (laptop)")
+        # blank falls back to the default app name
+        remote.set_client_name("   ")
+        self.assertEqual(remote.client_name, "TellyKeys")
 
     def test_global_search_launches_query_and_opens_result(self) -> None:
         from unittest import mock

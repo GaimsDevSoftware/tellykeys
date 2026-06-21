@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import socket
 import threading
 import warnings
 from concurrent.futures import Future
@@ -36,7 +37,9 @@ from .settings import (
     save_settings,
     set_app_buttons,
     set_microphone_source,
+    set_remote_name,
     set_shows,
+    clear_credentials,
 )
 
 
@@ -48,6 +51,12 @@ warnings.filterwarnings(
 
 PAIRING_CODE_LENGTH = 6
 DEFAULT_MICROPHONE_ID = "__default__"
+
+
+def default_remote_name() -> str:
+    """A per-machine remote name so the TV keeps each device paired separately."""
+    host = socket.gethostname().split(".")[0].strip()
+    return (f"TellyKeys ({host})" if host else "TellyKeys")[:64]
 
 # How a saved show is opened. Each entry is (display name, mode).
 #   "search"  -> Google TV universal search jumps straight to the title's
@@ -168,6 +177,7 @@ class TellyKeysWindow(Gtk.Window):
         self.tray_icon: Gtk.StatusIcon | None = None
         self.remote = TellyKeysRemote()
         self.remote.set_microphone_source(self.settings.microphone_source)
+        self.remote.set_client_name(self.settings.remote_name or default_remote_name())
         self.remote.set_status_callback(lambda status: GLib.idle_add(self.show_tv_status, status))
         self.remote.set_voice_status_callback(lambda message, active: GLib.idle_add(self.show_voice_status, message, active))
         self.remote.set_text_field_callback(lambda state: GLib.idle_add(self.show_text_field_state, state))
@@ -321,6 +331,28 @@ class TellyKeysWindow(Gtk.Window):
         self.power_button = Gtk.Button(label="Power")
         self.power_button.connect("clicked", lambda *_: self.send_key("POWER"))
         connect_row.pack_start(self.power_button, True, True, 0)
+
+        remote_name_label = Gtk.Label(label="Remote name", xalign=0)
+        remote_name_label.get_style_context().add_class("section-label")
+        tv_box.pack_start(remote_name_label, False, False, 0)
+        remote_name_hint = Gtk.Label(
+            label="The name this device shows on the TV. Give each of your computers a different name so the TV keeps them paired separately — otherwise pairing a second device unpairs the first. Changing it requires pairing again.",
+            xalign=0,
+        )
+        remote_name_hint.get_style_context().add_class("hint")
+        remote_name_hint.set_line_wrap(True)
+        tv_box.pack_start(remote_name_hint, False, False, 0)
+
+        remote_name_row = Gtk.Box(spacing=8)
+        tv_box.pack_start(remote_name_row, False, False, 0)
+        self.remote_name_entry = Gtk.Entry()
+        self.remote_name_entry.set_placeholder_text(default_remote_name())
+        self.remote_name_entry.set_text(self.settings.remote_name or default_remote_name())
+        self.remote_name_entry.connect("activate", self.on_save_remote_name)
+        remote_name_row.pack_start(self.remote_name_entry, True, True, 0)
+        save_remote_name_button = Gtk.Button(label="Save & re-pair")
+        save_remote_name_button.connect("clicked", self.on_save_remote_name)
+        remote_name_row.pack_start(save_remote_name_button, False, False, 0)
 
         manual_launch_label = Gtk.Label(label="Manual launch", xalign=0)
         manual_launch_label.get_style_context().add_class("section-label")
@@ -1217,6 +1249,29 @@ class TellyKeysWindow(Gtk.Window):
                 return ("pairing", device)
 
         self.run_task(connect_flow(), self.after_connect_result)
+
+    def on_save_remote_name(self, _button: Gtk.Button | None = None) -> None:
+        name = self.remote_name_entry.get_text().strip() or default_remote_name()
+        current = self.settings.remote_name or default_remote_name()
+        if name == current:
+            self.remote.set_client_name(name)
+            self.set_status("Remote name is unchanged.")
+            return
+
+        if not self.confirm(
+            "Change remote name?",
+            "This removes the current pairing on every TV and you must pair again. Continue?",
+        ):
+            return
+
+        self.remote.disconnect()
+        self.connected = False
+        self.settings = set_remote_name(self.settings, name)
+        save_settings(self.settings)
+        self.remote.set_client_name(self.settings.remote_name or default_remote_name())
+        clear_credentials()
+        self.remote_name_entry.set_text(self.settings.remote_name or default_remote_name())
+        self.set_status(f"Remote name saved as \"{name}\".\nTap Start pairing to pair this device with the TV.")
 
     def on_device_selected(self, combo: Gtk.ComboBoxText) -> None:
         host = combo.get_active_id()

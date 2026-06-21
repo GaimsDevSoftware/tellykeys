@@ -31,6 +31,7 @@ class Settings:
     app_buttons_configured: bool = False
     shows: list["ShortcutButton"] = field(default_factory=list)
     microphone_source: str = ""
+    remote_name: str = ""
 
 
 @dataclass
@@ -88,6 +89,7 @@ def load_settings() -> Settings:
         app_buttons_configured=app_buttons_configured,
         shows=shows,
         microphone_source=data["microphone_source"].strip() if isinstance(data.get("microphone_source"), str) else "",
+        remote_name=data["remote_name"].strip() if isinstance(data.get("remote_name"), str) else "",
     )
 
 
@@ -101,6 +103,7 @@ def save_settings(settings: Settings) -> None:
         "app_buttons_configured": settings.app_buttons_configured,
         "shows": [{"label": button.label, "target": button.target} for button in settings.shows],
         "microphone_source": settings.microphone_source,
+        "remote_name": settings.remote_name,
     }
     SETTINGS_FILE.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -120,6 +123,7 @@ def remember_device(settings: Settings, host: str, label: str | None = None) -> 
         app_buttons_configured=settings.app_buttons_configured,
         shows=settings.shows,
         microphone_source=settings.microphone_source,
+        remote_name=settings.remote_name,
     )
 
 
@@ -138,6 +142,7 @@ def forget_device(settings: Settings, host: str) -> Settings:
         app_buttons_configured=settings.app_buttons_configured,
         shows=settings.shows,
         microphone_source=settings.microphone_source,
+        remote_name=settings.remote_name,
     )
 
 
@@ -157,6 +162,7 @@ def add_button(settings: Settings, label: str, target: str) -> Settings:
         app_buttons_configured=settings.app_buttons_configured,
         shows=settings.shows,
         microphone_source=settings.microphone_source,
+        remote_name=settings.remote_name,
     )
 
 
@@ -170,6 +176,7 @@ def remove_button(settings: Settings, label: str) -> Settings:
         app_buttons_configured=settings.app_buttons_configured,
         shows=settings.shows,
         microphone_source=settings.microphone_source,
+        remote_name=settings.remote_name,
     )
 
 
@@ -182,6 +189,7 @@ def set_app_buttons(settings: Settings, buttons: list[ShortcutButton]) -> Settin
         app_buttons_configured=True,
         shows=settings.shows,
         microphone_source=settings.microphone_source,
+        remote_name=settings.remote_name,
     )
 
 
@@ -194,6 +202,7 @@ def set_shows(settings: Settings, shows: list[ShortcutButton]) -> Settings:
         app_buttons_configured=settings.app_buttons_configured,
         shows=shows[:24],
         microphone_source=settings.microphone_source,
+        remote_name=settings.remote_name,
     )
 
 
@@ -206,7 +215,31 @@ def set_microphone_source(settings: Settings, source: str) -> Settings:
         app_buttons_configured=settings.app_buttons_configured,
         shows=settings.shows,
         microphone_source=source.strip(),
+        remote_name=settings.remote_name,
     )
+
+
+def set_remote_name(settings: Settings, name: str) -> Settings:
+    return Settings(
+        last_host=settings.last_host,
+        devices=settings.devices,
+        buttons=settings.buttons,
+        app_buttons=settings.app_buttons,
+        app_buttons_configured=settings.app_buttons_configured,
+        shows=settings.shows,
+        microphone_source=settings.microphone_source,
+        remote_name=name.strip()[:64],
+    )
+
+
+def clear_credentials() -> None:
+    """Delete all stored pairing certificates so they are regenerated (and
+    re-paired) — needed after the remote name changes, since the name is baked
+    into each certificate at generation time."""
+    try:
+        shutil.rmtree(DEVICES_DIR)
+    except FileNotFoundError:
+        pass
 
 
 def reset_all() -> Settings:
