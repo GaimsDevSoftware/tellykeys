@@ -16,7 +16,7 @@ text input and system settings shortcuts. Pairing data is stored locally in
 - Website: https://gaimsdevsoftware.github.io/tellykeys/
 - Source code: https://github.com/GaimsDevSoftware/tellykeys
 - Latest release: https://github.com/GaimsDevSoftware/tellykeys/releases/latest
-- Debian package (Linux Mint / Ubuntu): https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/tellykeys_0.1.0_all.deb
+- Debian package (Linux Mint / Ubuntu): https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/tellykeys_0.2.0_all.deb
 
 ## Features
 
@@ -49,7 +49,7 @@ Google TV apps handle text differently, so TellyKeys tries, in order of context:
 - Voice search depends on the TV supporting third-party remote voice sessions and is experimental.
 - App-specific text input behavior varies by Google TV app.
 - RPM and Flatpak packages are not yet released; use the source install on those platforms.
-- TellyKeys is version 0.1.0 and under active development.
+- TellyKeys is version 0.2.0 and under active development.
 
 ## Keywords
 
