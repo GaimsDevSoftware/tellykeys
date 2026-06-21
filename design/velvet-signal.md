@@ -1,0 +1,17 @@
+# Velvet Signal
+
+**A visual philosophy of heat, intimacy, and the slow pull of attraction.**
+
+---
+
+Velvet Signal is the study of a charge that travels in the dark. It maps the thing that passes between a body and the object of its attention — the warmth, the pull, the held breath before contact. Where most systems chase clarity, this one chases temperature. It treats desire as a measurable field and renders it with the reverence usually reserved for the sacred. Every curve here is *meticulously crafted*, every glow tuned by hand until it smoulders rather than shines — the unmistakable product of deep expertise, of someone who has labored over heat itself until it obeyed.
+
+**Space and form** move like a slow exhale. A single molten center anchors the composition and radiates outward in concentric waves — not the clean rings of a diagram but the warm bloom of something alive and close. Through it threads one long sinuous line, a silhouette drawn in a single confident gesture, the spine of the whole image. Form is sparing and sensual: the glowing core, the soft orbit, the curve that suggests a body without ever showing one. Negative space is not empty here — it is the dim room around the light, charged and waiting, composed with the same painstaking attention as the glow it surrounds.
+
+**Color and material** burn low and rich. A deep wine-black stands for the unlit hour; from its center rises a sultry gradient — rose bleeding into ember into amber — the temperature of skin and candlelight. Champagne carries the few words; a dusk-mauve handles the quiet labels; rose-gold draws the finest lines like jewelry against dark velvet. The palette is severe and total, each tone calibrated against the others until the relationship feels inevitable and the single hot accent reads as precious precisely because the darkness around it has agreed to smoulder, never blaze.
+
+**Scale and rhythm** seduce through patient repetition. A languid waveform rises and falls like breath; faint marks accumulate in the margins like the gradations of an intimate instrument; the orbits repeat at slowing intervals, each one softer than the last. This density is never loud — it is the texture of sustained attention, the sense that something fleeting has been watched for countless hours and rendered with master-level execution. Tension and release alternate: the dense glow, then the cool dark; the bold serif, then the whispered line.
+
+**Composition and hierarchy** follow the logic of an elegant clinical plate — a field guide to something that cannot be photographed, only felt. Restrained reference markers and warm notations frame the central heat without ever crowding it. Type is rare and load-bearing: one confident high-contrast serif as the single sensual voice, a thin monospace as the instrument's hushed readout, a slanted line that leans in like a confidence. Words never explain; they smoulder. Nothing overlaps, nothing strays past its margin — every element sits exactly where a master placed it, and the restraint itself is the proof of the hand behind it.
+
+Above all, Velvet Signal must look *labored over* — slow, deliberate, and expensive in its discipline, an artifact that insists something as ephemeral as attraction can be studied, mapped, and made beautiful. The goal is a still object that holds the memory of heat: composed in the dark, glowing just enough to draw the eye closer.
