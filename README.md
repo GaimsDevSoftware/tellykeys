@@ -21,7 +21,7 @@ Packages will be attached to GitHub Releases as they are built:
 | --- | --- | --- |
 | Linux Mint / Ubuntu | [`tellykeys_0.2.0_all.deb`](https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/tellykeys_0.2.0_all.deb) | Available |
 | Fedora / RPM distros | [`tellykeys-0.2.0-1.noarch.rpm`](https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/tellykeys-0.2.0-1.noarch.rpm) | Available |
-| Cross-distro Linux | [`org.gaimsdevsoftware.TellyKeys.flatpak`](https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/org.gaimsdevsoftware.TellyKeys.flatpak) | Available |
+| Cross-distro Linux | [`org.gaimsdevsoftware.TellyKeys.flatpak`](https://github.com/GaimsDevSoftware/tellykeys/releases/latest/download/org.gaimsdevsoftware.TellyKeys.flatpak) | Coming soon |
 
 Until the first release assets are uploaded, install from source:
 

@@ -118,7 +118,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: tellykeys-rpm
-          path: dist/tellykeys-*-1.*.noarch.rpm
+          path: dist/tellykeys-*.noarch.rpm
           if-no-files-found: error
 
   # 4) Flatpak — separat job, tillates å feile uten å sprenge releasen.
@@ -201,5 +201,5 @@ jobs:
           fail_on_unmatched_files: false
           files: |
             artifacts/tellykeys_*_all.deb
-            artifacts/tellykeys-*-1.*.noarch.rpm
+            artifacts/tellykeys-*.noarch.rpm
             artifacts/org.gaimsdevsoftware.TellyKeys.flatpak
