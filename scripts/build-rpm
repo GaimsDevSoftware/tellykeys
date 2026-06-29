@@ -65,7 +65,9 @@ Requires: avahi-tools
 Requires: python3-cryptography
 Requires: python3-protobuf
 Requires: pipewire-utils
+Requires: libappindicator-gtk3
 Recommends: android-tools
+Recommends: gnome-shell-extension-appindicator
 
 %description
 TellyKeys is a GTK desktop remote for Google TV and Android TV with pairing,
