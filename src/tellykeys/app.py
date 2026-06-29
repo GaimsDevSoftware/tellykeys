@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib
 import os
 import socket
 import threading
@@ -175,6 +176,8 @@ class TellyKeysWindow(Gtk.Window):
         self.current_status: TvStatus | None = None
         self.use_tray = use_tray
         self.tray_icon: Gtk.StatusIcon | None = None
+        self.app_indicator = None
+        self._tray_show_item: Gtk.MenuItem | None = None
         self.remote = TellyKeysRemote()
         self.remote.set_microphone_source(self.settings.microphone_source)
         self.remote.set_client_name(self.settings.remote_name or default_remote_name())
@@ -1762,6 +1765,35 @@ class TellyKeysWindow(Gtk.Window):
         self.run_remote_call(self.remote.launch, target)
 
     def setup_tray(self) -> None:
+        # Prefer libappindicator (StatusNotifierItem). The legacy Gtk.StatusIcon
+        # is a no-op on GNOME and on Wayland generally, so it is only a fallback
+        # for desktops where it still works (e.g. some X11 setups).
+        if self._setup_app_indicator():
+            return
+        self._setup_status_icon()
+
+    def _setup_app_indicator(self) -> bool:
+        for name in ("AyatanaAppIndicator3", "AppIndicator3"):
+            try:
+                gi.require_version(name, "0.1")
+                ind = importlib.import_module(f"gi.repository.{name}")
+            except (ValueError, ImportError):
+                continue
+            self.app_indicator = ind.Indicator.new(
+                "tellykeys",
+                "tellykeys",
+                ind.IndicatorCategory.APPLICATION_STATUS,
+            )
+            self.app_indicator.set_status(ind.IndicatorStatus.ACTIVE)
+            self.app_indicator.set_title("TellyKeys")
+            self.app_indicator.set_menu(self._build_tray_menu())
+            # Where the host supports it, a middle-click toggles the window.
+            if self._tray_show_item is not None:
+                self.app_indicator.set_secondary_activate_target(self._tray_show_item)
+            return True
+        return False
+
+    def _setup_status_icon(self) -> None:
         self.tray_icon = Gtk.StatusIcon.new_from_icon_name("tellykeys")
         self.tray_icon.set_title("TellyKeys")
         self.tray_icon.set_tooltip_text("TellyKeys")
@@ -1769,10 +1801,7 @@ class TellyKeysWindow(Gtk.Window):
         self.tray_icon.connect("activate", self.on_tray_activate)
         self.tray_icon.connect("popup-menu", self.on_tray_popup)
 
-    def on_tray_activate(self, _icon: Gtk.StatusIcon) -> None:
-        self.toggle_window()
-
-    def on_tray_popup(self, _icon: Gtk.StatusIcon, button: int, activate_time: int) -> None:
+    def _build_tray_menu(self) -> Gtk.Menu:
         menu = Gtk.Menu()
         items = [
             ("Show TellyKeys", lambda *_: self.show_window()),
@@ -1787,7 +1816,16 @@ class TellyKeysWindow(Gtk.Window):
             item = Gtk.MenuItem(label=label)
             item.connect("activate", callback)
             menu.append(item)
+            if label == "Show TellyKeys":
+                self._tray_show_item = item
         menu.show_all()
+        return menu
+
+    def on_tray_activate(self, _icon: Gtk.StatusIcon) -> None:
+        self.toggle_window()
+
+    def on_tray_popup(self, _icon: Gtk.StatusIcon, button: int, activate_time: int) -> None:
+        menu = self._build_tray_menu()
         menu.popup(None, None, None, None, button, activate_time)
 
     def toggle_window(self) -> None:

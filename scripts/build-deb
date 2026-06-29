@@ -50,8 +50,8 @@ Section: utils
 Priority: optional
 Architecture: all
 Maintainer: GaimsDevSoftware <noreply@gaims.dev>
-Depends: python3 (>= 3.11), python3-gi, gir1.2-gtk-3.0, avahi-utils, python3-cryptography, python3-protobuf, pipewire-bin | pulseaudio-utils
-Recommends: android-tools-adb
+Depends: python3 (>= 3.11), python3-gi, gir1.2-gtk-3.0, avahi-utils, python3-cryptography, python3-protobuf, pipewire-bin | pulseaudio-utils, gir1.2-ayatanaappindicator3-0.1 | gir1.2-appindicator3-0.1
+Recommends: android-tools-adb, gnome-shell-extension-appindicator
 Description: Google TV and Android TV remote for Linux
  TellyKeys is a GTK desktop remote for Google TV and Android TV with pairing,
  D-pad controls, app shortcuts, text input, and experimental voice search.
