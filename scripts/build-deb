@@ -20,7 +20,7 @@ PY
 )"
 SITE="$ROOT/.venv/lib/python${PYVER}/site-packages"
 
-if [[ ! -d "$SITE/androidtvremote2" || ! -d "$SITE/aiofiles" ]]; then
+if [[ ! -d "$SITE/androidtvremote2" || ! -d "$SITE/aiofiles" || ! -d "$SITE/google" ]]; then
   echo "Missing bundled Python dependencies in .venv. Run: python -m pip install -e ." >&2
   exit 1
 fi
@@ -31,6 +31,11 @@ mkdir -p "$PKGROOT/DEBIAN" "$PKGROOT/opt/tellykeys/lib" "$PKGROOT/usr/bin" "$PKG
 cp -a "$ROOT/src/tellykeys" "$PKGROOT/opt/tellykeys/lib/"
 cp -a "$SITE/androidtvremote2" "$PKGROOT/opt/tellykeys/lib/"
 cp -a "$SITE/aiofiles" "$PKGROOT/opt/tellykeys/lib/"
+# Bundle protobuf so we don't depend on the distro's (often too old) build.
+# Strip the arch-specific C extension and force the pure-Python implementation
+# (see launcher below) so the package stays Architecture: all.
+cp -a "$SITE/google" "$PKGROOT/opt/tellykeys/lib/"
+find "$PKGROOT/opt/tellykeys/lib/google" -name '*.so' -delete
 cp "$ROOT/packaging/linux/tellykeys.desktop" "$PKGROOT/usr/share/applications/"
 cp "$ROOT/packaging/linux/tellykeys-tray.desktop" "$PKGROOT/usr/share/applications/"
 cp "$ROOT/assets/tellykeys.svg" "$PKGROOT/usr/share/icons/hicolor/scalable/apps/tellykeys.svg"
@@ -39,6 +44,9 @@ cp "$ROOT/README.md" "$PKGROOT/usr/share/doc/tellykeys/README.md"
 cat > "$PKGROOT/usr/bin/tellykeys" <<'EOF'
 #!/usr/bin/env bash
 export PYTHONPATH="/opt/tellykeys/lib${PYTHONPATH:+:$PYTHONPATH}"
+# Use the bundled pure-Python protobuf (the C extension is stripped to keep the
+# package architecture-independent).
+export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION="${PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION:-python}"
 exec python3 -m tellykeys.app "$@"
 EOF
 chmod 0755 "$PKGROOT/usr/bin/tellykeys"
@@ -50,7 +58,7 @@ Section: utils
 Priority: optional
 Architecture: all
 Maintainer: GaimsDevSoftware <noreply@gaims.dev>
-Depends: python3 (>= 3.11), python3-gi, gir1.2-gtk-3.0, avahi-utils, python3-cryptography, python3-protobuf, pipewire-bin | pulseaudio-utils
+Depends: python3 (>= 3.11), python3-gi, gir1.2-gtk-3.0, avahi-utils, python3-cryptography, pipewire-bin | pulseaudio-utils
 Recommends: android-tools-adb
 Description: Google TV and Android TV remote for Linux
  TellyKeys is a GTK desktop remote for Google TV and Android TV with pairing,
